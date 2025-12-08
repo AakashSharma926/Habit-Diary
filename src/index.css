@@ -1,0 +1,390 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #1a1a2e;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #4a4a6a;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #6a6a8a;
+}
+
+/* Custom animations */
+@keyframes pulse-glow {
+  0%, 100% {
+    box-shadow: 0 0 5px rgba(139, 92, 246, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 20px rgba(139, 92, 246, 0.6);
+  }
+}
+
+@keyframes slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.animate-pulse-glow {
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+.animate-slide-up {
+  animation: slide-up 0.3s ease-out forwards;
+}
+
+.animate-fade-in {
+  animation: fade-in 0.2s ease-out forwards;
+}
+
+/* Number input arrows removal */
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+input[type="number"] {
+  -moz-appearance: textfield;
+}
+
+/* Glass effect */
+.glass {
+  background: rgba(26, 26, 46, 0.8);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Gradient text */
+.gradient-text {
+  background: linear-gradient(135deg, #8b5cf6 0%, #06b6d4 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* ============ STREAK ANIMATIONS ============ */
+
+/* Fire animation for 30+ day streaks */
+@keyframes fire-glow {
+  0%, 100% {
+    box-shadow: 0 0 10px #f59e0b, 0 0 20px #f59e0b, 0 0 30px #ef4444;
+    transform: scale(1);
+  }
+  50% {
+    box-shadow: 0 0 15px #f59e0b, 0 0 30px #f59e0b, 0 0 45px #ef4444;
+    transform: scale(1.05);
+  }
+}
+
+@keyframes fire-flicker {
+  0%, 100% { opacity: 1; transform: scaleY(1); }
+  25% { opacity: 0.9; transform: scaleY(0.97); }
+  50% { opacity: 1; transform: scaleY(1.02); }
+  75% { opacity: 0.95; transform: scaleY(0.98); }
+}
+
+/* Gold shimmer for 14+ day streaks */
+@keyframes gold-shimmer {
+  0% { background-position: -200% center; }
+  100% { background-position: 200% center; }
+}
+
+/* Silver pulse for 7+ day streaks */
+@keyframes silver-pulse {
+  0%, 100% {
+    box-shadow: 0 0 5px rgba(6, 182, 212, 0.4);
+    transform: scale(1);
+  }
+  50% {
+    box-shadow: 0 0 15px rgba(6, 182, 212, 0.6);
+    transform: scale(1.02);
+  }
+}
+
+/* Bronze glow for 3+ day streaks */
+@keyframes bronze-glow {
+  0%, 100% { box-shadow: 0 0 5px rgba(16, 185, 129, 0.3); }
+  50% { box-shadow: 0 0 10px rgba(16, 185, 129, 0.5); }
+}
+
+/* Number pop animation */
+@keyframes number-pop {
+  0% { transform: scale(0.5); opacity: 0; }
+  50% { transform: scale(1.2); }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+/* Streak counter bounce */
+@keyframes streak-bounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-3px); }
+}
+
+/* Streak classes */
+.streak-fire {
+  animation: fire-glow 1.5s ease-in-out infinite;
+}
+
+.streak-fire .streak-icon {
+  animation: fire-flicker 0.5s ease-in-out infinite;
+}
+
+.streak-gold {
+  background: linear-gradient(
+    90deg,
+    #f59e0b 0%,
+    #fcd34d 25%,
+    #f59e0b 50%,
+    #fcd34d 75%,
+    #f59e0b 100%
+  );
+  background-size: 200% auto;
+  animation: gold-shimmer 3s linear infinite;
+  -webkit-background-clip: text;
+  background-clip: text;
+}
+
+.streak-silver {
+  animation: silver-pulse 2s ease-in-out infinite;
+}
+
+.streak-bronze {
+  animation: bronze-glow 2s ease-in-out infinite;
+}
+
+.streak-number {
+  animation: number-pop 0.4s ease-out forwards;
+}
+
+.streak-badge {
+  animation: streak-bounce 2s ease-in-out infinite;
+}
+
+/* Flame emoji animation */
+@keyframes flame-dance {
+  0%, 100% { 
+    transform: rotate(-5deg) scale(1); 
+    filter: brightness(1);
+  }
+  25% { 
+    transform: rotate(5deg) scale(1.1); 
+    filter: brightness(1.2);
+  }
+  50% { 
+    transform: rotate(-3deg) scale(1.05); 
+    filter: brightness(1.1);
+  }
+  75% { 
+    transform: rotate(3deg) scale(1.08); 
+    filter: brightness(1.15);
+  }
+}
+
+.flame-animate {
+  display: inline-block;
+  animation: flame-dance 0.8s ease-in-out infinite;
+}
+
+/* Sparkle effect */
+@keyframes sparkle {
+  0%, 100% { opacity: 0; transform: scale(0) rotate(0deg); }
+  50% { opacity: 1; transform: scale(1) rotate(180deg); }
+}
+
+.sparkle::before,
+.sparkle::after {
+  content: '✨';
+  position: absolute;
+  font-size: 10px;
+  animation: sparkle 1.5s ease-in-out infinite;
+}
+
+.sparkle::before {
+  top: -5px;
+  right: -5px;
+  animation-delay: 0s;
+}
+
+.sparkle::after {
+  bottom: -5px;
+  left: -5px;
+  animation-delay: 0.75s;
+}
+
+/* ============ MILESTONE STREAK ANIMATIONS ============ */
+
+/* Legendary (60+ days) - Purple fire effect */
+@keyframes legendary-glow {
+  0%, 100% {
+    box-shadow: 0 0 10px #c084fc, 0 0 20px #a855f7, 0 0 30px #9333ea;
+    filter: brightness(1);
+  }
+  50% {
+    box-shadow: 0 0 20px #c084fc, 0 0 40px #a855f7, 0 0 60px #9333ea;
+    filter: brightness(1.2);
+  }
+}
+
+@keyframes legendary-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+}
+
+.streak-legendary {
+  animation: legendary-glow 1.5s ease-in-out infinite, legendary-pulse 2s ease-in-out infinite;
+  background: linear-gradient(135deg, #c084fc, #a855f7, #9333ea) !important;
+}
+
+/* Mythic (100+ days) - Intense pulsing fire with particles */
+@keyframes mythic-fire {
+  0%, 100% {
+    box-shadow: 
+      0 0 15px #ff6b6b,
+      0 0 30px #ef4444,
+      0 0 45px #dc2626,
+      0 0 60px #b91c1c;
+    transform: scale(1);
+  }
+  25% {
+    box-shadow: 
+      0 0 20px #ff6b6b,
+      0 0 40px #ef4444,
+      0 0 60px #dc2626,
+      0 0 80px #b91c1c;
+    transform: scale(1.03);
+  }
+  50% {
+    box-shadow: 
+      0 0 25px #ff6b6b,
+      0 0 50px #ef4444,
+      0 0 75px #dc2626,
+      0 0 100px #b91c1c;
+    transform: scale(1.06);
+  }
+  75% {
+    box-shadow: 
+      0 0 20px #ff6b6b,
+      0 0 40px #ef4444,
+      0 0 60px #dc2626,
+      0 0 80px #b91c1c;
+    transform: scale(1.03);
+  }
+}
+
+@keyframes mythic-shake {
+  0%, 100% { transform: translateX(0); }
+  10%, 30%, 50%, 70%, 90% { transform: translateX(-1px); }
+  20%, 40%, 60%, 80% { transform: translateX(1px); }
+}
+
+.streak-mythic {
+  animation: mythic-fire 1s ease-in-out infinite;
+  background: linear-gradient(135deg, #ff6b6b, #ef4444, #dc2626) !important;
+}
+
+.streak-mythic .streak-icon {
+  animation: mythic-shake 0.5s ease-in-out infinite, flame-dance 0.6s ease-in-out infinite;
+}
+
+/* Immortal (365+ days) - Rainbow effect with cosmic glow */
+@keyframes rainbow-shift {
+  0% { filter: hue-rotate(0deg) brightness(1.2); }
+  50% { filter: hue-rotate(180deg) brightness(1.4); }
+  100% { filter: hue-rotate(360deg) brightness(1.2); }
+}
+
+@keyframes cosmic-glow {
+  0%, 100% {
+    box-shadow: 
+      0 0 20px #ffd700,
+      0 0 40px #ff6b6b,
+      0 0 60px #c084fc,
+      0 0 80px #06b6d4,
+      inset 0 0 20px rgba(255, 215, 0, 0.3);
+  }
+  33% {
+    box-shadow: 
+      0 0 25px #c084fc,
+      0 0 50px #06b6d4,
+      0 0 75px #10b981,
+      0 0 100px #ffd700,
+      inset 0 0 25px rgba(192, 132, 252, 0.3);
+  }
+  66% {
+    box-shadow: 
+      0 0 25px #06b6d4,
+      0 0 50px #10b981,
+      0 0 75px #ffd700,
+      0 0 100px #ff6b6b,
+      inset 0 0 25px rgba(6, 182, 212, 0.3);
+  }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50% { transform: translateY(-3px) scale(1.02); }
+}
+
+@keyframes star-twinkle {
+  0%, 100% { opacity: 1; transform: scale(1) rotate(0deg); }
+  50% { opacity: 0.8; transform: scale(1.2) rotate(180deg); }
+}
+
+.streak-immortal {
+  animation: cosmic-glow 3s ease-in-out infinite, float 2s ease-in-out infinite;
+  background: linear-gradient(135deg, #ffd700, #ff6b6b, #c084fc, #06b6d4, #10b981) !important;
+  background-size: 400% 400%;
+  animation: cosmic-glow 3s ease-in-out infinite, rainbow-shift 5s linear infinite;
+}
+
+.streak-immortal .streak-icon {
+  animation: star-twinkle 1s ease-in-out infinite;
+}
+
+/* Streak indicator for tracker - small inline badge */
+.streak-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px 6px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  min-width: 32px;
+  justify-content: center;
+}
+
+.streak-indicator.on-track {
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.2), rgba(6, 182, 212, 0.2));
+  color: #10b981;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.streak-indicator.behind {
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.2), rgba(245, 158, 11, 0.2));
+  color: #ef4444;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
