@@ -14,6 +14,11 @@ import {
   importData,
   deleteAllHabits,
   deleteAllEntries,
+  // Friend data
+  getFriendHabits,
+  getFriendEntries,
+  subscribeToFriendHabits,
+  subscribeToFriendEntries,
 } from '../lib/firebase';
 import {
   subscribeToHabitsLocal,
@@ -47,6 +52,12 @@ interface HabitContextType {
   isLoading: boolean;
   error: string | null;
   isUsingLocalStorage: boolean;
+  
+  // User state
+  currentUserId: string | null;
+  viewingUserId: string | null; // If viewing a friend's dashboard
+  isViewingFriend: boolean;
+  setViewingUser: (userId: string | null) => void;
 
   // Navigation
   goToPreviousWeek: () => void;
@@ -54,12 +65,12 @@ interface HabitContextType {
   goToCurrentWeek: () => void;
   goToWeek: (date: Date) => void;
 
-  // Habit CRUD
+  // Habit CRUD (only works when not viewing friend)
   addHabit: (data: HabitFormData) => Promise<void>;
   editHabit: (habitId: string, data: Partial<HabitFormData>) => Promise<void>;
   removeHabit: (habitId: string) => Promise<void>;
 
-  // Entry operations
+  // Entry operations (only works when not viewing friend)
   updateEntry: (habitId: string, date: string, value: number) => Promise<void>;
   getEntryValue: (habitId: string, date: string) => number;
 
@@ -70,6 +81,9 @@ interface HabitContextType {
   clearAllData: () => Promise<void>;
   clearAllEntries: () => Promise<void>;
   generateFakeData: (months: number) => Promise<void>;
+  
+  // Set current user (called from AuthContext)
+  setCurrentUserId: (userId: string | null) => void;
 }
 
 const HabitContext = createContext<HabitContextType | null>(null);
@@ -82,52 +96,103 @@ export function HabitProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   
-  const isUsingLocalStorage = !isFirebaseConfigured;
+  // User state
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [viewingUserId, setViewingUserId] = useState<string | null>(null);
+  
+  // Determine which mode we're in
+  const isUsingLocalStorage = !isFirebaseConfigured || !currentUserId;
+  const isViewingFriend = viewingUserId !== null && viewingUserId !== currentUserId;
+  const activeUserId = viewingUserId || currentUserId;
+
+  // Set viewing user (for friend dashboards)
+  const setViewingUser = useCallback((userId: string | null) => {
+    setViewingUserId(userId);
+  }, []);
 
   // Subscribe to habits
   useEffect(() => {
     setIsLoading(true);
     
-    const unsubscribe = isUsingLocalStorage
-      ? subscribeToHabitsLocal((newHabits) => {
-          setHabits(newHabits);
-          setIsLoading(false);
-        })
-      : subscribeToHabits((newHabits) => {
-          setHabits(newHabits);
-          setIsLoading(false);
-        });
+    let unsubscribe: () => void;
+    
+    if (isUsingLocalStorage) {
+      unsubscribe = subscribeToHabitsLocal((newHabits) => {
+        setHabits(newHabits);
+        setIsLoading(false);
+      });
+    } else if (isViewingFriend && viewingUserId) {
+      // Viewing friend's habits (read-only)
+      unsubscribe = subscribeToFriendHabits(viewingUserId, (newHabits) => {
+        setHabits(newHabits);
+        setIsLoading(false);
+      });
+    } else if (currentUserId) {
+      // Own habits
+      unsubscribe = subscribeToHabits(currentUserId, (newHabits) => {
+        setHabits(newHabits);
+        setIsLoading(false);
+      });
+    } else {
+      setHabits([]);
+      setIsLoading(false);
+      unsubscribe = () => {};
+    }
 
     return () => unsubscribe();
-  }, [isUsingLocalStorage]);
+  }, [isUsingLocalStorage, currentUserId, viewingUserId, isViewingFriend]);
 
   // Subscribe to entries for current week
   useEffect(() => {
     const weekStartStr = formatDate(weekStart);
     const weekEndStr = formatDate(getWeekEnd(weekStart));
 
-    const unsubscribe = isUsingLocalStorage
-      ? subscribeToEntriesForWeekLocal(weekStartStr, weekEndStr, (newEntries) => {
-          setEntries(newEntries);
-        })
-      : subscribeToEntriesForWeek(weekStartStr, weekEndStr, (newEntries) => {
-          setEntries(newEntries);
-        });
+    let unsubscribe: () => void;
+
+    if (isUsingLocalStorage) {
+      unsubscribe = subscribeToEntriesForWeekLocal(weekStartStr, weekEndStr, (newEntries) => {
+        setEntries(newEntries);
+      });
+    } else if (isViewingFriend && viewingUserId) {
+      // For friends, we get all entries and filter
+      unsubscribe = subscribeToFriendEntries(viewingUserId, (allFriendEntries) => {
+        const weekEntries = allFriendEntries.filter(
+          e => e.date >= weekStartStr && e.date <= weekEndStr
+        );
+        setEntries(weekEntries);
+      });
+    } else if (currentUserId) {
+      unsubscribe = subscribeToEntriesForWeek(currentUserId, weekStartStr, weekEndStr, (newEntries) => {
+        setEntries(newEntries);
+      });
+    } else {
+      setEntries([]);
+      unsubscribe = () => {};
+    }
 
     return () => unsubscribe();
-  }, [weekStart, isUsingLocalStorage]);
+  }, [weekStart, isUsingLocalStorage, currentUserId, viewingUserId, isViewingFriend]);
 
   // Load all entries for streak calculations
   const loadAllEntries = useCallback(async () => {
     try {
-      const fetchedEntries = isUsingLocalStorage
-        ? await getAllEntriesLocal()
-        : await getAllEntries();
+      let fetchedEntries: DailyEntry[];
+      
+      if (isUsingLocalStorage) {
+        fetchedEntries = await getAllEntriesLocal();
+      } else if (isViewingFriend && viewingUserId) {
+        fetchedEntries = await getFriendEntries(viewingUserId);
+      } else if (currentUserId) {
+        fetchedEntries = await getAllEntries(currentUserId);
+      } else {
+        fetchedEntries = [];
+      }
+      
       setAllEntries(fetchedEntries);
     } catch (err) {
       console.error('Failed to load all entries:', err);
     }
-  }, [isUsingLocalStorage]);
+  }, [isUsingLocalStorage, currentUserId, viewingUserId, isViewingFriend]);
 
   useEffect(() => {
     loadAllEntries();
@@ -150,8 +215,12 @@ export function HabitProvider({ children }: { children: React.ReactNode }) {
     setWeekStart(getWeekStart(date));
   }, []);
 
-  // Habit CRUD
+  // Habit CRUD (blocked when viewing friend)
   const addHabit = useCallback(async (data: HabitFormData) => {
+    if (isViewingFriend) {
+      throw new Error("Cannot edit a friend's habits");
+    }
+    
     try {
       const newHabit: Habit = {
         id: uuidv4(),
@@ -169,45 +238,57 @@ export function HabitProvider({ children }: { children: React.ReactNode }) {
       if (isUsingLocalStorage) {
         await createHabitLocal(newHabit);
         triggerLocalRefresh();
-      } else {
-        await createHabit(newHabit);
+      } else if (currentUserId) {
+        await createHabit(currentUserId, newHabit);
       }
     } catch (err) {
       setError('Failed to create habit');
       throw err;
     }
-  }, [habits.length, isUsingLocalStorage]);
+  }, [habits.length, isUsingLocalStorage, currentUserId, isViewingFriend]);
 
   const editHabit = useCallback(async (habitId: string, data: Partial<HabitFormData>) => {
+    if (isViewingFriend) {
+      throw new Error("Cannot edit a friend's habits");
+    }
+    
     try {
       if (isUsingLocalStorage) {
         await updateHabitLocal(habitId, data);
         triggerLocalRefresh();
-      } else {
-        await updateHabit(habitId, data);
+      } else if (currentUserId) {
+        await updateHabit(currentUserId, habitId, data);
       }
     } catch (err) {
       setError('Failed to update habit');
       throw err;
     }
-  }, [isUsingLocalStorage]);
+  }, [isUsingLocalStorage, currentUserId, isViewingFriend]);
 
   const removeHabit = useCallback(async (habitId: string) => {
+    if (isViewingFriend) {
+      throw new Error("Cannot delete a friend's habits");
+    }
+    
     try {
       if (isUsingLocalStorage) {
         await deleteHabitLocal(habitId);
         triggerLocalRefresh();
-      } else {
-        await deleteHabit(habitId);
+      } else if (currentUserId) {
+        await deleteHabit(currentUserId, habitId);
       }
     } catch (err) {
       setError('Failed to delete habit');
       throw err;
     }
-  }, [isUsingLocalStorage]);
+  }, [isUsingLocalStorage, currentUserId, isViewingFriend]);
 
-  // Entry operations
+  // Entry operations (blocked when viewing friend)
   const updateEntry = useCallback(async (habitId: string, date: string, value: number) => {
+    if (isViewingFriend) {
+      throw new Error("Cannot edit a friend's entries");
+    }
+    
     try {
       const entry: DailyEntry = {
         id: `${habitId}_${date}`,
@@ -221,16 +302,16 @@ export function HabitProvider({ children }: { children: React.ReactNode }) {
       if (isUsingLocalStorage) {
         await upsertEntryLocal(entry);
         triggerLocalRefresh();
-      } else {
-        await upsertEntry(entry);
+      } else if (currentUserId) {
+        await upsertEntry(currentUserId, entry);
       }
       
-      await loadAllEntries(); // Refresh all entries for streak calculations
+      await loadAllEntries();
     } catch (err) {
       setError('Failed to update entry');
       throw err;
     }
-  }, [loadAllEntries, isUsingLocalStorage]);
+  }, [loadAllEntries, isUsingLocalStorage, currentUserId, isViewingFriend]);
 
   const getEntryValue = useCallback((habitId: string, date: string): number => {
     const entry = entries.find((e) => e.habitId === habitId && e.date === date);
@@ -239,6 +320,8 @@ export function HabitProvider({ children }: { children: React.ReactNode }) {
 
   // Bulk operations
   const resetCurrentWeek = useCallback(async () => {
+    if (isViewingFriend) return;
+    
     try {
       const weekStartStr = formatDate(weekStart);
       const weekEndStr = formatDate(getWeekEnd(weekStart));
@@ -246,24 +329,26 @@ export function HabitProvider({ children }: { children: React.ReactNode }) {
       if (isUsingLocalStorage) {
         await resetWeekDataLocal(weekStartStr, weekEndStr);
         triggerLocalRefresh();
-      } else {
-        await resetWeekData(weekStartStr, weekEndStr);
+      } else if (currentUserId) {
+        await resetWeekData(currentUserId, weekStartStr, weekEndStr);
       }
     } catch (err) {
       setError('Failed to reset week');
       throw err;
     }
-  }, [weekStart, isUsingLocalStorage]);
+  }, [weekStart, isUsingLocalStorage, currentUserId, isViewingFriend]);
 
   const importFromJSON = useCallback(async (jsonString: string) => {
+    if (isViewingFriend) return;
+    
     try {
       const data = JSON.parse(jsonString);
       if (data.habits && data.entries) {
         if (isUsingLocalStorage) {
           await importDataLocal(data.habits, data.entries);
           triggerLocalRefresh();
-        } else {
-          await importData(data.habits, data.entries);
+        } else if (currentUserId) {
+          await importData(currentUserId, data.habits, data.entries);
         }
         await loadAllEntries();
       } else {
@@ -273,68 +358,66 @@ export function HabitProvider({ children }: { children: React.ReactNode }) {
       setError('Failed to import data');
       throw err;
     }
-  }, [loadAllEntries, isUsingLocalStorage]);
+  }, [loadAllEntries, isUsingLocalStorage, currentUserId, isViewingFriend]);
 
   const clearAllData = useCallback(async () => {
+    if (isViewingFriend) return;
+    
     try {
       if (isUsingLocalStorage) {
         await deleteAllHabitsLocal();
         triggerLocalRefresh();
-      } else {
-        await deleteAllHabits();
+      } else if (currentUserId) {
+        await deleteAllHabits(currentUserId);
       }
     } catch (err) {
       setError('Failed to clear data');
       throw err;
     }
-  }, [isUsingLocalStorage]);
+  }, [isUsingLocalStorage, currentUserId, isViewingFriend]);
 
   const clearAllEntries = useCallback(async () => {
+    if (isViewingFriend) return;
+    
     try {
       if (isUsingLocalStorage) {
         await deleteAllEntriesLocal();
         triggerLocalRefresh();
-      } else {
-        await deleteAllEntries();
+      } else if (currentUserId) {
+        await deleteAllEntries(currentUserId);
       }
       await loadAllEntries();
     } catch (err) {
       setError('Failed to clear entries');
       throw err;
     }
-  }, [isUsingLocalStorage, loadAllEntries]);
+  }, [isUsingLocalStorage, currentUserId, loadAllEntries, isViewingFriend]);
 
   const generateFakeData = useCallback(async (months: number) => {
+    if (isViewingFriend) return;
+    
     try {
       const today = new Date();
       const startDate = subDays(today, months * 30);
       const days = eachDayOfInterval({ start: startDate, end: today });
 
-      // Generate entries for each habit for each day
       for (const habit of habits) {
         for (const day of days) {
           const dateStr = formatDate(day);
           const dailyGoal = habit.weeklyGoal / 7;
           
-          // Random completion with some variance
-          // 70% chance of completing, with some variation
           const completionChance = Math.random();
           let value = 0;
 
           if (habit.type === 'binary') {
-            // Binary: either 0 or 1
             value = completionChance > 0.3 ? 1 : 0;
           } else {
-            // Numeric: random value around the daily goal
             if (completionChance > 0.3) {
-              // Complete with some variance (80% to 120% of daily goal)
               const variance = 0.8 + Math.random() * 0.4;
               value = Math.round(dailyGoal * variance);
             } else if (completionChance > 0.15) {
-              // Partial completion (30% to 70% of daily goal)
               value = Math.round(dailyGoal * (0.3 + Math.random() * 0.4));
             }
-            // else value stays 0 (missed day)
           }
 
           if (value > 0) {
@@ -349,8 +432,8 @@ export function HabitProvider({ children }: { children: React.ReactNode }) {
 
             if (isUsingLocalStorage) {
               await upsertEntryLocal(entry);
-            } else {
-              await upsertEntry(entry);
+            } else if (currentUserId) {
+              await upsertEntry(currentUserId, entry);
             }
           }
         }
@@ -364,7 +447,7 @@ export function HabitProvider({ children }: { children: React.ReactNode }) {
       setError('Failed to generate fake data');
       throw err;
     }
-  }, [habits, isUsingLocalStorage, loadAllEntries]);
+  }, [habits, isUsingLocalStorage, currentUserId, loadAllEntries, isViewingFriend]);
 
   const value: HabitContextType = {
     habits,
@@ -374,6 +457,10 @@ export function HabitProvider({ children }: { children: React.ReactNode }) {
     isLoading,
     error,
     isUsingLocalStorage,
+    currentUserId,
+    viewingUserId,
+    isViewingFriend,
+    setViewingUser,
     goToPreviousWeek,
     goToNextWeek,
     goToCurrentWeek,
@@ -389,6 +476,7 @@ export function HabitProvider({ children }: { children: React.ReactNode }) {
     clearAllData,
     clearAllEntries,
     generateFakeData,
+    setCurrentUserId,
   };
 
   return <HabitContext.Provider value={value}>{children}</HabitContext.Provider>;

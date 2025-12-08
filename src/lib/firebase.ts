@@ -1,4 +1,5 @@
 import { initializeApp } from 'firebase/app';
+import { getAuth, GoogleAuthProvider } from 'firebase/auth';
 import {
   getFirestore,
   collection,
@@ -13,287 +14,306 @@ import {
   orderBy,
   onSnapshot,
   writeBatch,
+  serverTimestamp,
   Timestamp,
 } from 'firebase/firestore';
 import type { Habit, DailyEntry } from '../types';
 
-// Firebase configuration - Replace with your own config
+// Firebase configuration
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "",
   authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "",
   projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "",
   storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "",
   messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "",
-  appId: import.meta.env.VITE_FIREBASE_APP_ID || "",
+  appId: import.meta.env.VITE_FIREBASE_APP_ID || ""
 };
 
 // Check if Firebase is configured
 export const isFirebaseConfigured = Boolean(
   firebaseConfig.apiKey && 
   firebaseConfig.projectId && 
-  firebaseConfig.apiKey !== "YOUR_API_KEY"
+  firebaseConfig.apiKey !== ""
 );
 
+// Initialize Firebase only if configured
 let app: ReturnType<typeof initializeApp> | null = null;
 let db: ReturnType<typeof getFirestore> | null = null;
+let auth: ReturnType<typeof getAuth> | null = null;
 
 if (isFirebaseConfigured) {
   app = initializeApp(firebaseConfig);
   db = getFirestore(app);
+  auth = getAuth(app);
 }
 
-export { db };
+export { auth, db };
+export const googleProvider = new GoogleAuthProvider();
 
-// Collection references
-const HABITS_COLLECTION = 'habits';
-const ENTRIES_COLLECTION = 'entries';
-
-// ============ HABIT OPERATIONS ============
-
-export async function createHabit(habit: Habit): Promise<void> {
-  if (!db) throw new Error('Firebase not configured');
-  const habitRef = doc(db, HABITS_COLLECTION, habit.id);
-  await setDoc(habitRef, {
-    ...habit,
-    createdAt: Timestamp.now(),
+// Configure Google provider
+if (isFirebaseConfigured) {
+  googleProvider.setCustomParameters({
+    prompt: 'select_account'
   });
 }
 
-export async function updateHabit(habitId: string, updates: Partial<Habit>): Promise<void> {
-  if (!db) throw new Error('Firebase not configured');
-  const habitRef = doc(db, HABITS_COLLECTION, habitId);
-  await updateDoc(habitRef, updates);
-}
+// ============ USER-SPECIFIC FIRESTORE OPERATIONS ============
 
-export async function deleteHabit(habitId: string): Promise<void> {
+// Get user's habits collection reference
+const getUserHabitsRef = (userId: string) => {
   if (!db) throw new Error('Firebase not configured');
-  const batch = writeBatch(db);
-  
-  // Delete the habit
-  const habitRef = doc(db, HABITS_COLLECTION, habitId);
-  batch.delete(habitRef);
-  
-  // Delete all entries for this habit
-  const entriesQuery = query(
-    collection(db, ENTRIES_COLLECTION),
-    where('habitId', '==', habitId)
-  );
-  const entriesSnapshot = await getDocs(entriesQuery);
-  entriesSnapshot.docs.forEach((docSnap) => {
-    batch.delete(docSnap.ref);
-  });
-  
-  await batch.commit();
-}
+  return collection(db, 'users', userId, 'habits');
+};
 
-export async function getHabits(): Promise<Habit[]> {
+// Get user's entries collection reference
+const getUserEntriesRef = (userId: string) => {
   if (!db) throw new Error('Firebase not configured');
-  // Fetch all habits and filter/sort client-side to avoid composite index requirement
-  const snapshot = await getDocs(collection(db, HABITS_COLLECTION));
-  return snapshot.docs
-    .map((docSnap) => ({
-      ...docSnap.data(),
-      id: docSnap.id,
-      createdAt: docSnap.data().createdAt?.toDate?.()?.toISOString() || docSnap.data().createdAt,
-    }) as Habit)
-    .filter((habit) => !habit.archived)
-    .sort((a, b) => a.order - b.order);
-}
+  return collection(db, 'users', userId, 'entries');
+};
 
-export function subscribeToHabits(callback: (habits: Habit[]) => void): () => void {
+// ============ HABITS CRUD ============
+
+export function subscribeToHabits(userId: string, callback: (habits: Habit[]) => void) {
   if (!db) {
     callback([]);
     return () => {};
   }
-  
-  // Subscribe to all habits and filter/sort client-side to avoid composite index requirement
-  return onSnapshot(collection(db, HABITS_COLLECTION), (snapshot) => {
-    const habits = snapshot.docs
-      .map((docSnap) => ({
-        ...docSnap.data(),
-        id: docSnap.id,
-        createdAt: docSnap.data().createdAt?.toDate?.()?.toISOString() || docSnap.data().createdAt,
-      }) as Habit)
-      .filter((habit) => !habit.archived)
-      .sort((a, b) => a.order - b.order);
+
+  const habitsRef = getUserHabitsRef(userId);
+  const q = query(habitsRef, orderBy('order', 'asc'));
+
+  return onSnapshot(q, (snapshot) => {
+    const habits: Habit[] = snapshot.docs.map((doc) => ({
+      id: doc.id,
+      ...doc.data(),
+    })) as Habit[];
     callback(habits);
-  }, (error) => {
-    console.error('Error subscribing to habits:', error);
-    callback([]);
   });
 }
 
-// ============ ENTRY OPERATIONS ============
-
-export async function upsertEntry(entry: DailyEntry): Promise<void> {
+export async function createHabit(userId: string, habit: Habit) {
   if (!db) throw new Error('Firebase not configured');
-  const entryId = `${entry.habitId}_${entry.date}`;
-  const entryRef = doc(db, ENTRIES_COLLECTION, entryId);
-  
-  const existingDoc = await getDoc(entryRef);
-  
-  if (existingDoc.exists()) {
-    await updateDoc(entryRef, {
-      value: entry.value,
-      updatedAt: Timestamp.now(),
-    });
-  } else {
-    await setDoc(entryRef, {
-      ...entry,
-      id: entryId,
-      createdAt: Timestamp.now(),
-      updatedAt: Timestamp.now(),
-    });
-  }
+  const habitsRef = getUserHabitsRef(userId);
+  await setDoc(doc(habitsRef, habit.id), habit);
 }
 
-export async function getEntriesForWeek(weekStart: string, weekEnd: string): Promise<DailyEntry[]> {
+export async function updateHabit(userId: string, habitId: string, data: Partial<Habit>) {
   if (!db) throw new Error('Firebase not configured');
-  const entriesQuery = query(
-    collection(db, ENTRIES_COLLECTION),
-    where('date', '>=', weekStart),
-    where('date', '<=', weekEnd),
-    orderBy('date', 'asc')
-  );
-  const snapshot = await getDocs(entriesQuery);
-  return snapshot.docs.map((docSnap) => ({
-    ...docSnap.data(),
-    id: docSnap.id,
-    createdAt: docSnap.data().createdAt?.toDate?.()?.toISOString() || docSnap.data().createdAt,
-    updatedAt: docSnap.data().updatedAt?.toDate?.()?.toISOString() || docSnap.data().updatedAt,
-  })) as DailyEntry[];
+  const habitRef = doc(getUserHabitsRef(userId), habitId);
+  await updateDoc(habitRef, data);
 }
 
-export async function getEntriesForHabit(habitId: string): Promise<DailyEntry[]> {
+export async function deleteHabit(userId: string, habitId: string) {
   if (!db) throw new Error('Firebase not configured');
-  const entriesQuery = query(
-    collection(db, ENTRIES_COLLECTION),
-    where('habitId', '==', habitId),
-    orderBy('date', 'desc')
-  );
-  const snapshot = await getDocs(entriesQuery);
-  return snapshot.docs.map((docSnap) => ({
-    ...docSnap.data(),
-    id: docSnap.id,
-  })) as DailyEntry[];
+  const habitRef = doc(getUserHabitsRef(userId), habitId);
+  await deleteDoc(habitRef);
 }
 
-export async function getAllEntries(): Promise<DailyEntry[]> {
-  if (!db) throw new Error('Firebase not configured');
-  const entriesQuery = query(
-    collection(db, ENTRIES_COLLECTION),
-    orderBy('date', 'desc')
-  );
-  const snapshot = await getDocs(entriesQuery);
-  return snapshot.docs.map((docSnap) => ({
-    ...docSnap.data(),
-    id: docSnap.id,
-    createdAt: docSnap.data().createdAt?.toDate?.()?.toISOString() || docSnap.data().createdAt,
-    updatedAt: docSnap.data().updatedAt?.toDate?.()?.toISOString() || docSnap.data().updatedAt,
-  })) as DailyEntry[];
-}
+// ============ ENTRIES CRUD ============
 
 export function subscribeToEntriesForWeek(
+  userId: string,
   weekStart: string,
   weekEnd: string,
   callback: (entries: DailyEntry[]) => void
-): () => void {
+) {
   if (!db) {
     callback([]);
     return () => {};
   }
-  
-  const entriesQuery = query(
-    collection(db, ENTRIES_COLLECTION),
-    where('date', '>=', weekStart),
-    where('date', '<=', weekEnd),
-    orderBy('date', 'asc')
-  );
-  
-  return onSnapshot(entriesQuery, (snapshot) => {
-    const entries = snapshot.docs.map((docSnap) => ({
-      ...docSnap.data(),
-      id: docSnap.id,
-      createdAt: docSnap.data().createdAt?.toDate?.()?.toISOString() || docSnap.data().createdAt,
-      updatedAt: docSnap.data().updatedAt?.toDate?.()?.toISOString() || docSnap.data().updatedAt,
-    })) as DailyEntry[];
-    callback(entries);
-  }, (error) => {
-    console.error('Error subscribing to entries:', error);
-    callback([]);
-  });
-}
 
-// ============ BULK OPERATIONS ============
-
-export async function importData(habits: Habit[], entries: DailyEntry[]): Promise<void> {
-  if (!db) throw new Error('Firebase not configured');
-  const batch = writeBatch(db);
-  
-  habits.forEach((habit) => {
-    const habitRef = doc(db!, HABITS_COLLECTION, habit.id);
-    batch.set(habitRef, habit);
-  });
-  
-  entries.forEach((entry) => {
-    const entryId = `${entry.habitId}_${entry.date}`;
-    const entryRef = doc(db!, ENTRIES_COLLECTION, entryId);
-    batch.set(entryRef, { ...entry, id: entryId });
-  });
-  
-  await batch.commit();
-}
-
-export async function resetWeekData(weekStart: string, weekEnd: string): Promise<void> {
-  if (!db) throw new Error('Firebase not configured');
-  const entriesQuery = query(
-    collection(db, ENTRIES_COLLECTION),
+  const entriesRef = getUserEntriesRef(userId);
+  const q = query(
+    entriesRef,
     where('date', '>=', weekStart),
     where('date', '<=', weekEnd)
   );
-  
-  const snapshot = await getDocs(entriesQuery);
-  const batch = writeBatch(db);
-  
-  snapshot.docs.forEach((docSnap) => {
-    batch.delete(docSnap.ref);
+
+  return onSnapshot(q, (snapshot) => {
+    const entries: DailyEntry[] = snapshot.docs.map((doc) => ({
+      id: doc.id,
+      ...doc.data(),
+    })) as DailyEntry[];
+    callback(entries);
   });
-  
+}
+
+export async function getAllEntries(userId: string): Promise<DailyEntry[]> {
+  if (!db) return [];
+  const entriesRef = getUserEntriesRef(userId);
+  const snapshot = await getDocs(entriesRef);
+  return snapshot.docs.map((doc) => ({
+    id: doc.id,
+    ...doc.data(),
+  })) as DailyEntry[];
+}
+
+export async function upsertEntry(userId: string, entry: DailyEntry) {
+  if (!db) throw new Error('Firebase not configured');
+  const entryRef = doc(getUserEntriesRef(userId), entry.id);
+  await setDoc(entryRef, entry);
+}
+
+export async function resetWeekData(userId: string, weekStart: string, weekEnd: string) {
+  if (!db) throw new Error('Firebase not configured');
+  const entriesRef = getUserEntriesRef(userId);
+  const q = query(
+    entriesRef,
+    where('date', '>=', weekStart),
+    where('date', '<=', weekEnd)
+  );
+  const snapshot = await getDocs(q);
+  const batch = writeBatch(db);
+  snapshot.docs.forEach((doc) => batch.delete(doc.ref));
   await batch.commit();
 }
 
-export async function deleteAllHabits(): Promise<void> {
+export async function importData(userId: string, habits: Habit[], entries: DailyEntry[]) {
   if (!db) throw new Error('Firebase not configured');
-  
-  // Delete all habits
-  const habitsSnapshot = await getDocs(collection(db, HABITS_COLLECTION));
-  const entriesSnapshot = await getDocs(collection(db, ENTRIES_COLLECTION));
-  
-  // Firestore batch has a limit of 500 operations, so we may need multiple batches
-  const allDocs = [...habitsSnapshot.docs, ...entriesSnapshot.docs];
-  const batchSize = 450;
-  
-  for (let i = 0; i < allDocs.length; i += batchSize) {
-    const batch = writeBatch(db);
-    const chunk = allDocs.slice(i, i + batchSize);
-    chunk.forEach((docSnap) => batch.delete(docSnap.ref));
-    await batch.commit();
-  }
+  const batch = writeBatch(db);
+
+  habits.forEach((habit) => {
+    const habitRef = doc(getUserHabitsRef(userId), habit.id);
+    batch.set(habitRef, habit);
+  });
+
+  entries.forEach((entry) => {
+    const entryRef = doc(getUserEntriesRef(userId), entry.id);
+    batch.set(entryRef, entry);
+  });
+
+  await batch.commit();
 }
 
-export async function deleteAllEntries(): Promise<void> {
+export async function deleteAllHabits(userId: string) {
   if (!db) throw new Error('Firebase not configured');
-  
-  // Delete only entries (tracking data), keep habits
-  const entriesSnapshot = await getDocs(collection(db, ENTRIES_COLLECTION));
-  
-  // Firestore batch has a limit of 500 operations, so we may need multiple batches
-  const batchSize = 450;
-  
-  for (let i = 0; i < entriesSnapshot.docs.length; i += batchSize) {
-    const batch = writeBatch(db);
-    const chunk = entriesSnapshot.docs.slice(i, i + batchSize);
-    chunk.forEach((docSnap) => batch.delete(docSnap.ref));
-    await batch.commit();
-  }
+  const habitsRef = getUserHabitsRef(userId);
+  const snapshot = await getDocs(habitsRef);
+  const batch = writeBatch(db);
+  snapshot.docs.forEach((doc) => batch.delete(doc.ref));
+  await batch.commit();
 }
+
+export async function deleteAllEntries(userId: string) {
+  if (!db) throw new Error('Firebase not configured');
+  const entriesRef = getUserEntriesRef(userId);
+  const snapshot = await getDocs(entriesRef);
+  const batch = writeBatch(db);
+  snapshot.docs.forEach((doc) => batch.delete(doc.ref));
+  await batch.commit();
+}
+
+// ============ FRIEND DATA ACCESS (READ-ONLY) ============
+
+export async function getFriendHabits(friendUserId: string): Promise<Habit[]> {
+  if (!db) return [];
+  const habitsRef = getUserHabitsRef(friendUserId);
+  const q = query(habitsRef, orderBy('order', 'asc'));
+  const snapshot = await getDocs(q);
+  return snapshot.docs.map((doc) => ({
+    id: doc.id,
+    ...doc.data(),
+  })) as Habit[];
+}
+
+export async function getFriendEntries(friendUserId: string): Promise<DailyEntry[]> {
+  if (!db) return [];
+  const entriesRef = getUserEntriesRef(friendUserId);
+  const snapshot = await getDocs(entriesRef);
+  return snapshot.docs.map((doc) => ({
+    id: doc.id,
+    ...doc.data(),
+  })) as DailyEntry[];
+}
+
+export function subscribeToFriendHabits(friendUserId: string, callback: (habits: Habit[]) => void) {
+  if (!db) {
+    callback([]);
+    return () => {};
+  }
+
+  const habitsRef = getUserHabitsRef(friendUserId);
+  const q = query(habitsRef, orderBy('order', 'asc'));
+
+  return onSnapshot(q, (snapshot) => {
+    const habits: Habit[] = snapshot.docs.map((doc) => ({
+      id: doc.id,
+      ...doc.data(),
+    })) as Habit[];
+    callback(habits);
+  });
+}
+
+export function subscribeToFriendEntries(friendUserId: string, callback: (entries: DailyEntry[]) => void) {
+  if (!db) {
+    callback([]);
+    return () => {};
+  }
+
+  const entriesRef = getUserEntriesRef(friendUserId);
+
+  return onSnapshot(entriesRef, (snapshot) => {
+    const entries: DailyEntry[] = snapshot.docs.map((doc) => ({
+      id: doc.id,
+      ...doc.data(),
+    })) as DailyEntry[];
+    callback(entries);
+  });
+}
+
+// ============ USER PROFILE ============
+
+export interface UserProfile {
+  uid: string;
+  email: string | null;
+  displayName: string | null;
+  photoURL: string | null;
+  createdAt: Timestamp | Date;
+  friends: string[];
+}
+
+export async function getUserProfile(userId: string): Promise<UserProfile | null> {
+  if (!db) return null;
+  const userRef = doc(db, 'users', userId);
+  const userSnap = await getDoc(userRef);
+  if (userSnap.exists()) {
+    return userSnap.data() as UserProfile;
+  }
+  return null;
+}
+
+export async function createUserProfile(profile: UserProfile) {
+  if (!db) throw new Error('Firebase not configured');
+  const userRef = doc(db, 'users', profile.uid);
+  await setDoc(userRef, {
+    ...profile,
+    createdAt: serverTimestamp(),
+  });
+}
+
+export async function updateUserProfile(userId: string, data: Partial<UserProfile>) {
+  if (!db) throw new Error('Firebase not configured');
+  const userRef = doc(db, 'users', userId);
+  await updateDoc(userRef, data);
+}
+
+export async function findUserByEmail(email: string): Promise<UserProfile | null> {
+  if (!db) return null;
+  const usersRef = collection(db, 'users');
+  const q = query(usersRef, where('email', '==', email));
+  const snapshot = await getDocs(q);
+  if (snapshot.empty) return null;
+  return snapshot.docs[0].data() as UserProfile;
+}
+
+export async function getFriendProfiles(friendIds: string[]): Promise<UserProfile[]> {
+  if (!db || friendIds.length === 0) return [];
+  const profiles: UserProfile[] = [];
+  for (const id of friendIds) {
+    const profile = await getUserProfile(id);
+    if (profile) profiles.push(profile);
+  }
+  return profiles;
+}
+
+export default app;

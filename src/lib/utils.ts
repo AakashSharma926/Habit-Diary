@@ -10,6 +10,7 @@ import {
   parseISO,
   differenceInDays,
   addDays,
+  subDays,
 } from 'date-fns';
 import type { Habit, DailyEntry, WeeklyStats, OverallStats, StreakData } from '../types';
 
@@ -458,55 +459,120 @@ export function calculateOverallStreak(
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
+  const todayStr = formatDate(today);
   const currentWeekStart = getWeekStart(today);
   
-  // Get all weeks that have entries
-  const weeklyTotals = new Map<string, Map<string, number>>(); // weekStart -> habitId -> total
+  // Group entries by date for daily calculations
+  const dailyTotals = new Map<string, Map<string, number>>(); // date -> habitId -> value
   
   for (const entry of entries) {
-    const entryDate = parseISO(entry.date);
-    const weekStart = formatDate(getWeekStart(entryDate));
-    
-    if (!weeklyTotals.has(weekStart)) {
-      weeklyTotals.set(weekStart, new Map());
+    if (!dailyTotals.has(entry.date)) {
+      dailyTotals.set(entry.date, new Map());
     }
-    
-    const habitTotals = weeklyTotals.get(weekStart)!;
+    const habitTotals = dailyTotals.get(entry.date)!;
     habitTotals.set(entry.habitId, (habitTotals.get(entry.habitId) || 0) + entry.value);
   }
   
-  // Determine which weeks are "complete" (all habits met their weekly goals)
-  const completeWeeks = new Set<string>();
-  
-  for (const [weekStart, habitTotals] of weeklyTotals) {
-    let allHabitsComplete = true;
-    
-    for (const habit of habits) {
-      const total = habitTotals.get(habit.id) || 0;
-      // Need to meet at least 80% of weekly goal
-      if (total < habit.weeklyGoal * 0.8) {
-        allHabitsComplete = false;
-        break;
-      }
-    }
-    
-    if (allHabitsComplete) {
-      completeWeeks.add(weekStart);
+  // Calculate daily goal thresholds for each habit
+  // For binary: 1 completion = done
+  // For numeric: daily goal = weeklyGoal / 7
+  const dailyGoals = new Map<string, number>();
+  for (const habit of habits) {
+    if (habit.type === 'binary') {
+      dailyGoals.set(habit.id, 1);
+    } else {
+      dailyGoals.set(habit.id, habit.weeklyGoal / 7);
     }
   }
   
-  // Check current week status with detailed breakdown
-  // Uses same logic as TrackerView's getPacingStatus
-  const currentWeekStr = formatDate(currentWeekStart);
-  const currentWeekTotals = weeklyTotals.get(currentWeekStr) || new Map();
+  // Check if a day is "perfect" (all habits met their daily goal)
+  const isPerfectDay = (dateStr: string): boolean => {
+    const dayTotals = dailyTotals.get(dateStr);
+    if (!dayTotals) return false;
+    
+    for (const habit of habits) {
+      const value = dayTotals.get(habit.id) || 0;
+      const goal = dailyGoals.get(habit.id) || 0;
+      // Allow 80% completion for numeric habits
+      const threshold = habit.type === 'binary' ? goal : goal * 0.8;
+      if (value < threshold) {
+        return false;
+      }
+    }
+    return true;
+  };
+  
+  // Calculate current streak (consecutive perfect days ending at today or yesterday)
+  let currentStreak = 0;
+  let checkDate = new Date(today);
+  
+  // First check if today is perfect
+  if (isPerfectDay(todayStr)) {
+    currentStreak = 1;
+    checkDate = subDays(today, 1);
+  } else {
+    // If today isn't perfect, start from yesterday
+    checkDate = subDays(today, 1);
+  }
+  
+  // Count backwards from the starting point
+  while (true) {
+    const dateStr = formatDate(checkDate);
+    if (isPerfectDay(dateStr)) {
+      currentStreak++;
+      checkDate = subDays(checkDate, 1);
+    } else {
+      break;
+    }
+  }
+  
+  // Calculate max streak by checking all days
+  let maxStreak = 0;
+  let tempStreak = 0;
+  const allDates = Array.from(dailyTotals.keys()).sort();
+  
+  for (let i = 0; i < allDates.length; i++) {
+    if (isPerfectDay(allDates[i])) {
+      if (tempStreak === 0) {
+        tempStreak = 1;
+      } else {
+        // Check if consecutive with previous day
+        const prevDate = allDates[i - 1];
+        const currDate = parseISO(allDates[i]);
+        const prevDateParsed = parseISO(prevDate);
+        const diff = differenceInDays(currDate, prevDateParsed);
+        
+        if (diff === 1) {
+          tempStreak++;
+        } else {
+          maxStreak = Math.max(maxStreak, tempStreak);
+          tempStreak = 1;
+        }
+      }
+    } else {
+      maxStreak = Math.max(maxStreak, tempStreak);
+      tempStreak = 0;
+    }
+  }
+  maxStreak = Math.max(maxStreak, tempStreak, currentStreak);
+  
+  // Calculate weekly status for the current week (for the badge color)
+  const weeklyTotals = new Map<string, number>(); // habitId -> total for current week
   const dayOfWeek = differenceInDays(today, currentWeekStart) + 1; // 1-7
+  
+  for (const entry of entries) {
+    const entryDate = parseISO(entry.date);
+    if (entryDate >= currentWeekStart && entryDate <= today) {
+      weeklyTotals.set(entry.habitId, (weeklyTotals.get(entry.habitId) || 0) + entry.value);
+    }
+  }
   
   let habitsOnTrack = 0;
   let habitsWarning = 0;
   let habitsBehind = 0;
   
   for (const habit of habits) {
-    const total = currentWeekTotals.get(habit.id) || 0;
+    const total = weeklyTotals.get(habit.id) || 0;
     const weeklyGoal = habit.weeklyGoal;
     
     // Already completed weekly goal
@@ -516,21 +582,17 @@ export function calculateOverallStreak(
     }
     
     if (habit.type === 'binary') {
-      // For binary habits: compare to expected days
       const expectedByToday = (weeklyGoal / 7) * dayOfWeek;
       const difference = total - expectedByToday;
       
       if (difference >= 0) {
         habitsOnTrack++;
       } else if (difference >= -1) {
-        // Within 1 day - warning (Catch Up)
         habitsWarning++;
       } else {
-        // More than 1 day behind
         habitsBehind++;
       }
     } else {
-      // For numeric habits: compare to expected amount
       const dailyGoal = weeklyGoal / 7;
       const expectedByToday = dailyGoal * dayOfWeek;
       const difference = total - expectedByToday;
@@ -538,79 +600,23 @@ export function calculateOverallStreak(
       if (difference >= 0) {
         habitsOnTrack++;
       } else if (difference >= -dailyGoal) {
-        // Within 1 day's worth - warning (Catch Up)
         habitsWarning++;
       } else {
-        // More than 1 day behind
         habitsBehind++;
       }
     }
   }
   
-  // Determine overall weekly status based on majority
   let weeklyStatus: 'on-track' | 'warning' | 'behind';
   if (habitsBehind > 0) {
-    // Any habit truly behind = red
     weeklyStatus = 'behind';
   } else if (habitsWarning > 0) {
-    // Some habits catching up = yellow
     weeklyStatus = 'warning';
   } else {
-    // All on track = green
     weeklyStatus = 'on-track';
   }
   
   const isCurrentWeekOnTrack = weeklyStatus === 'on-track';
-  
-  // Calculate current streak (in days, where each complete week = 7 days)
-  let currentStreak = 0;
-  const sortedWeeks = Array.from(completeWeeks).sort((a, b) => b.localeCompare(a)); // Most recent first
-  
-  // Start from last week (current week is still in progress)
-  const lastWeekStart = formatDate(subWeeks(currentWeekStart, 1));
-  
-  if (sortedWeeks.length > 0 && sortedWeeks[0] === lastWeekStart) {
-    // Last week was complete, count consecutive weeks
-    let checkWeek = parseISO(lastWeekStart);
-    
-    while (completeWeeks.has(formatDate(checkWeek))) {
-      currentStreak += 7; // Each complete week adds 7 days
-      checkWeek = subWeeks(checkWeek, 1);
-    }
-    
-    // Add current week's progress if on track
-    if (isCurrentWeekOnTrack) {
-      currentStreak += dayOfWeek;
-    }
-  } else if (isCurrentWeekOnTrack) {
-    // No complete weeks but current week is on track
-    currentStreak = dayOfWeek;
-  }
-  
-  // Calculate max streak
-  let maxStreak = 0;
-  const sortedWeeksAsc = Array.from(completeWeeks).sort();
-  
-  if (sortedWeeksAsc.length > 0) {
-    let tempStreak = 7;
-    
-    for (let i = 1; i < sortedWeeksAsc.length; i++) {
-      const prevWeek = parseISO(sortedWeeksAsc[i - 1]);
-      const currWeek = parseISO(sortedWeeksAsc[i]);
-      const diff = differenceInDays(currWeek, prevWeek);
-      
-      if (diff === 7) {
-        tempStreak += 7;
-      } else {
-        maxStreak = Math.max(maxStreak, tempStreak);
-        tempStreak = 7;
-      }
-    }
-    maxStreak = Math.max(maxStreak, tempStreak);
-  }
-  
-  // Include current streak in max if it's larger
-  maxStreak = Math.max(maxStreak, currentStreak);
 
   return { currentStreak, maxStreak, isCurrentWeekOnTrack, weeklyStatus };
 }
