@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, CalendarCheck, PieChart, Users, ArrowLeft, FileBarChart } from 'lucide-react';
+import { Plus, CalendarCheck, PieChart, Users, FileBarChart } from 'lucide-react';
 import { HabitProvider, useHabits } from './context/HabitContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { Header } from './components/Header';
@@ -9,6 +9,8 @@ import { MainDashboard } from './components/MainDashboard';
 import { TrackerView } from './components/TrackerView';
 import { FriendsPanel } from './components/FriendsPanel';
 import { ReportsView } from './components/ReportsView';
+// LoginScreen is used conditionally based on auth state
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { LoginScreen } from './components/LoginScreen';
 import type { Habit } from './types';
 

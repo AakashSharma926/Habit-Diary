@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import {
   PieChart,
   Pie,
@@ -26,9 +26,6 @@ import {
 import { useHabits } from '../context/HabitContext';
 import {
   formatDate,
-  formatDisplayDate,
-  getWeekStart,
-  getWeekEnd,
   calculateHabitStreak,
   calculateOverallStreak,
   getStreakLevel,
@@ -36,7 +33,6 @@ import {
 } from '../lib/utils';
 import { 
   format, 
-  eachWeekOfInterval, 
   eachDayOfInterval,
   differenceInDays,
   isWithinInterval,
@@ -47,13 +43,11 @@ import {
   startOfWeek,
   endOfWeek,
   startOfMonth,
-  endOfMonth,
   subMonths,
   startOfYear,
   endOfYear,
   getDay,
   getMonth,
-  isSameDay,
   isAfter,
 } from 'date-fns';
 import { DateRangePicker } from './DateRangePicker';
@@ -463,7 +457,7 @@ export function MainDashboard() {
                     borderRadius: '8px',
                     fontSize: '10px',
                   }}
-                  formatter={(value: number, name: string, props: any) => [
+                  formatter={(value: number, _name: string, props: any) => [
                     `${value}% (${props.payload.total}/${props.payload.expected})`,
                     props.payload.name
                   ]}
@@ -680,7 +674,6 @@ function YearlyActivityChart({ habits, allEntries }: { habits: any[]; allEntries
     // Create 12 months
     for (let monthIndex = 0; monthIndex < 12; monthIndex++) {
       const monthStart = new Date(selectedYear, monthIndex, 1);
-      const monthEnd = endOfMonth(monthStart);
       const monthName = format(monthStart, 'MMM');
       
       // Get days for this month from yearData
@@ -930,7 +923,6 @@ function StreaksSection({ habits, allEntries }: { habits: any[]; allEntries: any
       <div className="text-xs sm:text-sm text-slate-400 mb-2 sm:mb-3">Per-Habit Streaks</div>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-3">
         {habitStreaks.map(({ habit, currentStreak, maxStreak }) => {
-          const level = getStreakLevel(currentStreak);
           return (
             <div 
               key={habit.id} 

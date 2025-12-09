@@ -17,11 +17,8 @@ import {
 import { useHabits } from '../context/HabitContext';
 import { 
   formatDate, 
-  getWeekStart, 
-  getWeekEnd,
   calculateOverallStreak,
   calculateHabitStreak,
-  getStreakLevel,
   getStreakEmoji
 } from '../lib/utils';
 import {
@@ -35,8 +32,6 @@ import {
   startOfMonth,
   endOfMonth,
   eachDayOfInterval,
-  parseISO,
-  differenceInDays,
   addMonths,
   isSameMonth,
   isSameDay,
@@ -265,7 +260,6 @@ export function ReportsView() {
     return 'Custom';
   };
 
-  const streakLevel = getStreakLevel(reportData.overallStreak);
   const streakEmoji = getStreakEmoji(reportData.overallStreak);
 
   return (

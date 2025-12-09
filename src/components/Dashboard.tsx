@@ -35,7 +35,6 @@ import {
   getStatusColor,
   getRemainingDaysInWeek,
   getWeekStart,
-  formatWeekRange,
 } from '../lib/utils';
 import { subWeeks } from 'date-fns';
 import type { Habit } from '../types';
@@ -45,7 +44,7 @@ interface DashboardProps {
   onSelectHabit: (habit: Habit | null) => void;
 }
 
-export function Dashboard({ selectedHabit, onSelectHabit }: DashboardProps) {
+export function Dashboard({ onSelectHabit }: DashboardProps) {
   const { habits, entries, allEntries, weekStart } = useHabits();
 
   if (habits.length === 0) {

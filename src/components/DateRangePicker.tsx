@@ -1,5 +1,5 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { Calendar, ChevronLeft, ChevronRight, X } from 'lucide-react';
+import { useState } from 'react';
+import { ChevronLeft, ChevronRight, X } from 'lucide-react';
 import {
   format,
   startOfWeek,
@@ -16,7 +16,6 @@ import {
   subDays,
   subWeeks,
   subYears,
-  addDays,
 } from 'date-fns';
 
 interface DateRange {

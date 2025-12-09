@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import type { Habit, DailyEntry, HabitFormData } from '../types';
 import {
@@ -15,7 +15,6 @@ import {
   deleteAllHabits,
   deleteAllEntries,
   // Friend data
-  getFriendHabits,
   getFriendEntries,
   subscribeToFriendHabits,
   subscribeToFriendEntries,
@@ -103,7 +102,7 @@ export function HabitProvider({ children }: { children: React.ReactNode }) {
   // Determine which mode we're in
   const isUsingLocalStorage = !isFirebaseConfigured || !currentUserId;
   const isViewingFriend = viewingUserId !== null && viewingUserId !== currentUserId;
-  const activeUserId = viewingUserId || currentUserId;
+  const _activeUserId = viewingUserId || currentUserId;
 
   // Set viewing user (for friend dashboards)
   const setViewingUser = useCallback((userId: string | null) => {
