@@ -581,7 +581,7 @@ export function MainDashboard() {
       )}
 
       {/* Yearly Activity Chart */}
-      <YearlyActivityChart habits={habits} allEntries={allEntries} />
+      <YearlyActivityChart habits={filteredHabits} allEntries={allEntries} />
 
       {/* Streaks Section */}
       <StreaksSection habits={habits} allEntries={allEntries} />
@@ -772,7 +772,7 @@ function YearlyActivityChart({ habits, allEntries }: { habits: any[]; allEntries
       
       {/* Activity Heatmap - Months Layout */}
       <div className="overflow-x-auto pb-2">
-        <div className="flex gap-3 sm:gap-4">
+        <div className="flex gap-3 sm:gap-4 justify-center">
           {/* Day Labels Column */}
           <div className="flex flex-col flex-shrink-0">
             <div className="h-4 sm:h-5" /> {/* Spacer for month label */}
@@ -780,7 +780,7 @@ function YearlyActivityChart({ habits, allEntries }: { habits: any[]; allEntries
               {dayLabels.map((label, i) => (
                 <div 
                   key={i} 
-                  className="h-[9px] sm:h-[11px] flex items-center justify-end pr-1"
+                  className="h-[13px] sm:h-[15px] flex items-center justify-end pr-1"
                 >
                   <span className="text-[7px] sm:text-[8px] text-slate-500 font-medium">
                     {label}
@@ -804,14 +804,19 @@ function YearlyActivityChart({ habits, allEntries }: { habits: any[]; allEntries
               <div className="flex gap-[1px]">
                 {month.weeks.map((week, weekIndex) => (
                   <div key={weekIndex} className="flex flex-col gap-[1px]">
-                    {week.map((day, dayIndex) => (
-                      <div
-                        key={dayIndex}
-                        className="w-[9px] h-[9px] sm:w-[11px] sm:h-[11px] rounded-[2px] transition-all cursor-default hover:ring-1 hover:ring-white/40 hover:scale-110"
-                        style={{ backgroundColor: getLevelColor(day.completionLevel) }}
-                        title={day.dateStr ? `${format(day.date, 'EEE, MMM d, yyyy')}: ${day.completionPercent}% complete` : ''}
-                      />
-                    ))}
+                    {week.map((day, dayIndex) => {
+                      const isToday = day.dateStr === formatDate(new Date());
+                      return (
+                        <div
+                          key={dayIndex}
+                          className={`w-[13px] h-[13px] sm:w-[15px] sm:h-[15px] rounded-[2px] transition-all cursor-default hover:ring-1 hover:ring-white/40 hover:scale-110 ${
+                            isToday ? 'ring-2 ring-cyan-400 ring-offset-1 ring-offset-slate-900' : ''
+                          }`}
+                          style={{ backgroundColor: getLevelColor(day.completionLevel) }}
+                          title={day.dateStr ? `${format(day.date, 'EEE, MMM d, yyyy')}: ${day.completionPercent}% complete` : ''}
+                        />
+                      );
+                    })}
                   </div>
                 ))}
               </div>
@@ -830,7 +835,7 @@ function YearlyActivityChart({ habits, allEntries }: { habits: any[]; allEntries
           {[0, 1, 2, 3, 4].map(level => (
             <div
               key={level}
-              className="w-[9px] h-[9px] sm:w-[11px] sm:h-[11px] rounded-[2px]"
+              className="w-[13px] h-[13px] sm:w-[15px] sm:h-[15px] rounded-[2px]"
               style={{ backgroundColor: getLevelColor(level) }}
             />
           ))}
