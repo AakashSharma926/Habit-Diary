@@ -215,7 +215,7 @@ export function ReportsView() {
     const streakEmoji = getStreakEmoji(data.overallStreak);
     
     let text = `🎯 Habit Diary Report\n`;
-    text += `📅 ${data.period}\n\n`;
+    text += `🌱 ${data.period}\n\n`;
     
     text += `📊 Overview\n`;
     text += `• Completion Rate: ${data.overallCompletionRate.toFixed(1)}%\n`;

@@ -654,7 +654,7 @@ export function getStreakEmoji(streak: number): string {
   if (streak >= 14) return '⭐';   // Star for 14+
   if (streak >= 7) return '💫';    // Sparkles for 7+
   if (streak >= 3) return '✨';    // Sparkle for 3+
-  if (streak > 0) return '📅';     // Calendar for 1-2
+  if (streak > 0) return '🌱';     // Calendar for 1-2
   return '💤';                     // Sleep for 0
 }
 

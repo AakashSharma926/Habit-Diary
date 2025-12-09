@@ -316,7 +316,7 @@ export function HabitDetailModal({ habit, onClose }: HabitDetailModalProps) {
                 description="Complete 7 days in a row"
               />
               <Achievement
-                icon="📅"
+                icon="🌱"
                 title="4-Week Streak"
                 unlocked={streakData.longestWeeklyStreak >= 4}
                 description="Hit goal 4 weeks straight"

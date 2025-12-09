@@ -989,6 +989,12 @@ function StreaksSection({ habits, allEntries }: { habits: any[]; allEntries: any
         <div className="flex items-center gap-1 text-[10px] sm:text-xs text-slate-500">
           <span>✨</span> <span>3+</span>
         </div>
+        <div className="flex items-center gap-1 text-[10px] sm:text-xs text-slate-500">
+          <span>🌱</span> <span>1+</span>
+        </div>
+        <div className="flex items-center gap-1 text-[10px] sm:text-xs text-slate-500">
+          <span>💤</span> <span>0</span>
+        </div>
       </div>
     </div>
   );
