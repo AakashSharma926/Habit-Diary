@@ -9,7 +9,10 @@ import {
   Flame,
   Target,
   CheckCircle2,
-  Trophy
+  Trophy,
+  ChevronLeft,
+  ChevronRight,
+  X
 } from 'lucide-react';
 import { useHabits } from '../context/HabitContext';
 import { 
@@ -26,16 +29,25 @@ import {
   subDays,
   subWeeks,
   subMonths,
+  subYears,
   startOfWeek,
   endOfWeek,
   startOfMonth,
   endOfMonth,
   eachDayOfInterval,
   parseISO,
-  differenceInDays
+  differenceInDays,
+  addMonths,
+  isSameMonth,
+  isSameDay,
+  isAfter,
+  isBefore
 } from 'date-fns';
 
-type ReportPeriod = 'weekly' | 'monthly' | '4months' | '6months' | 'yearly';
+interface DateRange {
+  from: Date;
+  to: Date;
+}
 
 interface ReportData {
   period: string;
@@ -63,50 +75,30 @@ interface ReportData {
   maxStreak: number;
 }
 
-const PERIOD_OPTIONS: { value: ReportPeriod; label: string; description: string }[] = [
-  { value: 'weekly', label: 'Weekly', description: 'Last 7 days' },
-  { value: 'monthly', label: 'Monthly', description: 'Last 30 days' },
-  { value: '4months', label: 'Quarterly', description: 'Last 4 months' },
-  { value: '6months', label: 'Half Yearly', description: 'Last 6 months' },
-  { value: 'yearly', label: 'Yearly', description: 'Last 12 months' },
+const PRESET_RANGES = [
+  { label: 'Last 7 Days', getValue: () => ({ from: subDays(new Date(), 6), to: new Date() }) },
+  { label: 'This Week', getValue: () => ({ from: startOfWeek(new Date(), { weekStartsOn: 1 }), to: endOfWeek(new Date(), { weekStartsOn: 1 }) }) },
+  { label: 'Last Week', getValue: () => ({ from: startOfWeek(subWeeks(new Date(), 1), { weekStartsOn: 1 }), to: endOfWeek(subWeeks(new Date(), 1), { weekStartsOn: 1 }) }) },
+  { label: 'Last 30 Days', getValue: () => ({ from: subDays(new Date(), 29), to: new Date() }) },
+  { label: 'This Month', getValue: () => ({ from: startOfMonth(new Date()), to: endOfMonth(new Date()) }) },
+  { label: 'Last Month', getValue: () => ({ from: startOfMonth(subMonths(new Date(), 1)), to: endOfMonth(subMonths(new Date(), 1)) }) },
+  { label: 'Last 3 Months', getValue: () => ({ from: subMonths(new Date(), 3), to: new Date() }) },
+  { label: 'Last 6 Months', getValue: () => ({ from: subMonths(new Date(), 6), to: new Date() }) },
+  { label: 'Last Year', getValue: () => ({ from: subYears(new Date(), 1), to: new Date() }) },
 ];
 
 export function ReportsView() {
   const { habits, allEntries } = useHabits();
-  const [selectedPeriod, setSelectedPeriod] = useState<ReportPeriod>('weekly');
-  const [showPeriodDropdown, setShowPeriodDropdown] = useState(false);
+  const [dateRange, setDateRange] = useState<DateRange>(() => {
+    // Default to last 7 days
+    return { from: subDays(new Date(), 6), to: new Date() };
+  });
+  const [showDatePicker, setShowDatePicker] = useState(false);
 
   const reportData = useMemo((): ReportData => {
-    const today = new Date();
-    let startDate: Date;
-    let endDate = today;
-    let periodLabel: string;
-
-    switch (selectedPeriod) {
-      case 'weekly':
-        startDate = subDays(today, 6);
-        periodLabel = `${format(startDate, 'MMM d')} - ${format(endDate, 'MMM d, yyyy')}`;
-        break;
-      case 'monthly':
-        startDate = subDays(today, 29);
-        periodLabel = `${format(startDate, 'MMM d')} - ${format(endDate, 'MMM d, yyyy')}`;
-        break;
-      case '4months':
-        startDate = subMonths(today, 4);
-        periodLabel = `${format(startDate, 'MMM yyyy')} - ${format(endDate, 'MMM yyyy')}`;
-        break;
-      case '6months':
-        startDate = subMonths(today, 6);
-        periodLabel = `${format(startDate, 'MMM yyyy')} - ${format(endDate, 'MMM yyyy')}`;
-        break;
-      case 'yearly':
-        startDate = subMonths(today, 12);
-        periodLabel = `${format(startDate, 'MMM yyyy')} - ${format(endDate, 'MMM yyyy')}`;
-        break;
-      default:
-        startDate = subDays(today, 6);
-        periodLabel = 'Last 7 days';
-    }
+    const startDate = dateRange.from;
+    const endDate = dateRange.to;
+    const periodLabel = `${format(startDate, 'MMM d')} - ${format(endDate, 'MMM d, yyyy')}`;
 
     const days = eachDayOfInterval({ start: startDate, end: endDate });
     const totalDays = days.length;
@@ -205,7 +197,7 @@ export function ReportsView() {
       overallStreak: overallStreakData.currentStreak,
       maxStreak: overallStreakData.maxStreak
     };
-  }, [habits, allEntries, selectedPeriod]);
+  }, [habits, allEntries, dateRange]);
 
   const handleShare = async (platform: 'whatsapp' | 'copy') => {
     const reportText = generateReportText(reportData);
@@ -254,12 +246,25 @@ export function ReportsView() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `habit-report-${selectedPeriod}-${format(new Date(), 'yyyy-MM-dd')}.txt`;
+    a.download = `habit-report-${format(dateRange.from, 'yyyy-MM-dd')}-to-${format(dateRange.to, 'yyyy-MM-dd')}.txt`;
     a.click();
     URL.revokeObjectURL(url);
   };
 
-  const currentPeriodOption = PERIOD_OPTIONS.find(p => p.value === selectedPeriod)!;
+  const handleDateRangeChange = (range: DateRange) => {
+    setDateRange(range);
+  };
+
+  // Get display label for current date range
+  const getDateRangeLabel = () => {
+    const daysDiff = differenceInDays(dateRange.to, dateRange.from) + 1;
+    if (daysDiff <= 7) return 'Weekly';
+    if (daysDiff <= 31) return 'Monthly';
+    if (daysDiff <= 120) return 'Quarterly';
+    if (daysDiff <= 180) return 'Half Year';
+    return 'Custom';
+  };
+
   const streakLevel = getStreakLevel(reportData.overallStreak);
   const streakEmoji = getStreakEmoji(reportData.overallStreak);
 
@@ -278,45 +283,30 @@ export function ReportsView() {
             </div>
           </div>
 
-          {/* Period Selector */}
-          <div className="relative">
-            <button
-              onClick={() => setShowPeriodDropdown(!showPeriodDropdown)}
-              className="flex items-center gap-2 px-4 py-2.5 bg-slate-700/50 hover:bg-slate-700 border border-slate-600 rounded-xl transition-colors min-w-[180px] justify-between"
-            >
-              <div className="flex items-center gap-2">
-                <Calendar className="w-4 h-4 text-violet-400" />
-                <span>{currentPeriodOption.label}</span>
-              </div>
-              <ChevronDown className={`w-4 h-4 transition-transform ${showPeriodDropdown ? 'rotate-180' : ''}`} />
-            </button>
-
-            {showPeriodDropdown && (
-              <div className="absolute top-full mt-2 right-0 w-full bg-slate-800 border border-slate-700 rounded-xl shadow-xl z-10 overflow-hidden">
-                {PERIOD_OPTIONS.map((option) => (
-                  <button
-                    key={option.value}
-                    onClick={() => {
-                      setSelectedPeriod(option.value);
-                      setShowPeriodDropdown(false);
-                    }}
-                    className={`w-full px-4 py-3 text-left hover:bg-slate-700 transition-colors ${
-                      selectedPeriod === option.value ? 'bg-violet-500/20 text-violet-300' : ''
-                    }`}
-                  >
-                    <div className="font-medium">{option.label}</div>
-                    <div className="text-xs text-slate-400">{option.description}</div>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
+          {/* Date Range Selector */}
+          <button
+            onClick={() => setShowDatePicker(true)}
+            className="flex items-center gap-2 px-4 py-2.5 bg-slate-700/50 hover:bg-slate-700 border border-slate-600 rounded-xl transition-colors"
+          >
+            <Calendar className="w-4 h-4 text-violet-400" />
+            <span>{getDateRangeLabel()}</span>
+            <ChevronDown className="w-4 h-4" />
+          </button>
         </div>
 
         <div className="text-sm text-slate-400 mt-4">
           {reportData.period}
         </div>
       </div>
+
+      {/* Date Range Picker Modal */}
+      {showDatePicker && (
+        <ReportsDateRangePicker
+          value={dateRange}
+          onChange={handleDateRangeChange}
+          onClose={() => setShowDatePicker(false)}
+        />
+      )}
 
       {/* Quick Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
@@ -471,3 +461,203 @@ export function ReportsView() {
   );
 }
 
+// Reports Date Range Picker Component
+function ReportsDateRangePicker({ 
+  value, 
+  onChange, 
+  onClose 
+}: { 
+  value: DateRange; 
+  onChange: (range: DateRange) => void; 
+  onClose: () => void;
+}) {
+  const [currentMonth, setCurrentMonth] = useState(value.from);
+  const [selecting, setSelecting] = useState<'from' | 'to' | null>(null);
+  const [tempRange, setTempRange] = useState<DateRange>(value);
+
+  const getDaysInMonth = (date: Date) => {
+    const start = startOfWeek(startOfMonth(date), { weekStartsOn: 1 });
+    const end = endOfWeek(endOfMonth(date), { weekStartsOn: 1 });
+    return eachDayOfInterval({ start, end });
+  };
+
+  const handleDayClick = (day: Date) => {
+    if (selecting === 'from' || !selecting) {
+      setTempRange({ from: day, to: day });
+      setSelecting('to');
+    } else {
+      if (isBefore(day, tempRange.from)) {
+        setTempRange({ from: day, to: tempRange.from });
+      } else {
+        setTempRange({ ...tempRange, to: day });
+      }
+      setSelecting(null);
+    }
+  };
+
+  const handlePresetClick = (preset: typeof PRESET_RANGES[0]) => {
+    const range = preset.getValue();
+    setTempRange(range);
+    setCurrentMonth(range.from);
+    onChange(range);
+    onClose();
+  };
+
+  const handleApply = () => {
+    onChange(tempRange);
+    onClose();
+  };
+
+  const isInRange = (day: Date) => {
+    return (
+      (isAfter(day, tempRange.from) || isSameDay(day, tempRange.from)) &&
+      (isBefore(day, tempRange.to) || isSameDay(day, tempRange.to))
+    );
+  };
+
+  const days = getDaysInMonth(currentMonth);
+
+  return (
+    <div 
+      className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+      onClick={onClose}
+    >
+      <div
+        className="bg-slate-800 border border-slate-700 rounded-2xl shadow-2xl overflow-hidden animate-slide-up max-h-[90vh] overflow-y-auto"
+        style={{ minWidth: '600px', maxWidth: '95vw' }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between p-4 border-b border-slate-700">
+          <h3 className="font-semibold text-lg">Select Report Period</h3>
+          <button
+            onClick={onClose}
+            className="p-2 hover:bg-slate-700 rounded-lg transition-colors"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <div className="flex flex-col sm:flex-row">
+          {/* Preset Ranges */}
+          <div className="sm:w-44 bg-slate-900/50 border-b sm:border-b-0 sm:border-r border-slate-700 p-2">
+            <div className="text-xs text-slate-500 uppercase font-medium px-3 py-2">
+              Quick Select
+            </div>
+            <div className="flex sm:flex-col gap-1 overflow-x-auto sm:overflow-x-visible">
+              {PRESET_RANGES.map((preset) => (
+                <button
+                  key={preset.label}
+                  onClick={() => handlePresetClick(preset)}
+                  className="whitespace-nowrap text-left px-3 py-2 text-sm rounded-lg hover:bg-violet-600/20 hover:text-violet-400 transition-colors"
+                >
+                  {preset.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Calendar */}
+          <div className="flex-1 p-4">
+            {/* Month Navigation */}
+            <div className="flex items-center justify-between mb-4">
+              <button
+                onClick={() => setCurrentMonth(subMonths(currentMonth, 1))}
+                className="p-2 hover:bg-slate-700 rounded-lg transition-colors"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+              <div className="font-semibold">
+                {format(currentMonth, 'MMMM yyyy')}
+              </div>
+              <button
+                onClick={() => setCurrentMonth(addMonths(currentMonth, 1))}
+                className="p-2 hover:bg-slate-700 rounded-lg transition-colors"
+              >
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Day Names */}
+            <div className="grid grid-cols-7 gap-1 mb-2">
+              {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day) => (
+                <div
+                  key={day}
+                  className="text-center text-xs text-slate-500 font-medium py-1"
+                >
+                  {day}
+                </div>
+              ))}
+            </div>
+
+            {/* Days Grid */}
+            <div className="grid grid-cols-7 gap-1">
+              {days.map((day, idx) => {
+                const isCurrentMonth = isSameMonth(day, currentMonth);
+                const isSelected = isSameDay(day, tempRange.from) || isSameDay(day, tempRange.to);
+                const inRange = isInRange(day);
+                const isToday = isSameDay(day, new Date());
+                const isStart = isSameDay(day, tempRange.from);
+                const isEnd = isSameDay(day, tempRange.to);
+
+                return (
+                  <button
+                    key={idx}
+                    onClick={() => handleDayClick(day)}
+                    className={`
+                      relative h-9 text-sm rounded-lg transition-all
+                      ${!isCurrentMonth ? 'text-slate-600' : 'text-slate-300'}
+                      ${isToday && !isSelected ? 'ring-1 ring-violet-500' : ''}
+                      ${inRange && !isSelected ? 'bg-violet-600/20' : ''}
+                      ${isSelected ? 'bg-violet-600 text-white font-medium' : 'hover:bg-slate-700'}
+                      ${isStart && !isSameDay(tempRange.from, tempRange.to) ? 'rounded-r-none' : ''}
+                      ${isEnd && !isSameDay(tempRange.from, tempRange.to) ? 'rounded-l-none' : ''}
+                      ${inRange && !isStart && !isEnd ? 'rounded-none' : ''}
+                    `}
+                  >
+                    {format(day, 'd')}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Selected Range Display */}
+            <div className="mt-4 p-3 bg-slate-900/50 rounded-xl">
+              <div className="flex items-center justify-between text-sm">
+                <div>
+                  <span className="text-slate-500">From:</span>{' '}
+                  <span className="font-medium text-violet-400">
+                    {format(tempRange.from, 'MMM d, yyyy')}
+                  </span>
+                </div>
+                <div className="text-slate-600">→</div>
+                <div>
+                  <span className="text-slate-500">To:</span>{' '}
+                  <span className="font-medium text-cyan-400">
+                    {format(tempRange.to, 'MMM d, yyyy')}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="flex gap-2 mt-4">
+              <button
+                onClick={onClose}
+                className="flex-1 py-2 px-4 bg-slate-700 hover:bg-slate-600 rounded-xl text-sm font-medium transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleApply}
+                className="flex-1 py-2 px-4 bg-gradient-to-r from-violet-600 to-cyan-600 hover:from-violet-500 hover:to-cyan-500 rounded-xl text-sm font-medium transition-all"
+              >
+                Apply Range
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

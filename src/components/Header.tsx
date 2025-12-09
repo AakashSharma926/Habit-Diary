@@ -2,17 +2,14 @@ import { useMemo, useState } from 'react';
 import {
   Download,
   Upload,
-  RotateCcw,
   Trophy,
   LogIn,
   LogOut,
   User,
-  Users,
 } from 'lucide-react';
 import { useHabits } from '../context/HabitContext';
 import { useAuth } from '../context/AuthContext';
 import { exportToJSON, exportToCSV, downloadFile, calculateOverallStreak, getStreakLevel, getStreakEmoji } from '../lib/utils';
-import { FriendsPanel } from './FriendsPanel';
 
 interface HeaderProps {
   onImport: () => void;
@@ -20,7 +17,6 @@ interface HeaderProps {
 
 export function Header({ onImport }: HeaderProps) {
   const {
-    clearAllEntries,
     habits,
     allEntries,
     isViewingFriend,
@@ -28,7 +24,6 @@ export function Header({ onImport }: HeaderProps) {
   
   const { user, isAuthenticated, isFirebaseEnabled, signInWithGoogle, logout } = useAuth();
   const [showUserMenu, setShowUserMenu] = useState(false);
-  const [showFriendsPanel, setShowFriendsPanel] = useState(false);
 
   // Calculate overall streak (weekly-based)
   const overallStreak = useMemo(() => {
@@ -48,12 +43,6 @@ export function Header({ onImport }: HeaderProps) {
     const csv = exportToCSV(habits, allEntries);
     const filename = `habits-export-${new Date().toISOString().split('T')[0]}.csv`;
     downloadFile(csv, filename, 'text/csv');
-  };
-
-  const handleClearAllEntries = async () => {
-    if (confirm('⚠️ Clear all tracking data? Your habits will be kept, but all progress will be reset. This cannot be undone!')) {
-      await clearAllEntries();
-    }
   };
 
   // Get streak badge styling based on current week's overall status
@@ -157,29 +146,9 @@ export function Header({ onImport }: HeaderProps) {
                   <Upload className="w-4 h-4" />
                   <span className="hidden md:inline">Import</span>
                 </button>
-                
-                <button
-                  onClick={handleClearAllEntries}
-                  className="p-1.5 sm:p-2 hover:bg-amber-600/20 text-amber-400 rounded-lg transition-colors"
-                  title="Reset all tracking data"
-                >
-                  <RotateCcw className="w-4 h-4" />
-                </button>
               </>
             )}
             
-            {/* Browse Users Button */}
-            {isFirebaseEnabled && isAuthenticated && (
-              <button
-                onClick={() => setShowFriendsPanel(true)}
-                className="flex items-center gap-2 px-3 py-2 bg-violet-500/20 hover:bg-violet-500/30 text-violet-400 rounded-lg transition-colors text-sm"
-                title="Browse all users"
-              >
-                <Users className="w-4 h-4" />
-                <span className="hidden sm:inline">Users</span>
-              </button>
-            )}
-
             {/* User Account */}
             {isFirebaseEnabled && (
               <div className="relative ml-2">
@@ -242,10 +211,6 @@ export function Header({ onImport }: HeaderProps) {
         </div>
       </div>
 
-      {/* Friends/Users Panel Modal */}
-      {showFriendsPanel && (
-        <FriendsPanel onClose={() => setShowFriendsPanel(false)} />
-      )}
     </header>
   );
 }

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, CalendarCheck, PieChart, Users, ArrowLeft } from 'lucide-react';
+import { Plus, CalendarCheck, PieChart, Users, ArrowLeft, FileBarChart } from 'lucide-react';
 import { HabitProvider, useHabits } from './context/HabitContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { Header } from './components/Header';
@@ -143,7 +143,7 @@ function AppContent() {
                     : 'text-slate-400 hover:text-slate-200'
                 }`}
               >
-                <span className="text-base">📊</span>
+                <FileBarChart className="w-4 h-4 sm:w-5 sm:h-5" />
                 <span className="hidden xs:inline">Reports</span>
               </button>
             </div>
@@ -192,7 +192,7 @@ function AppContent() {
               >
                 <Plus className="w-5 h-5" />
                 Add Your First Habit
-              </button>
+        </button>
             </div>
           ) : habits.length === 0 && isViewingFriend ? (
             <div className="glass rounded-2xl p-12 text-center">

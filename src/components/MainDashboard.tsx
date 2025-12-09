@@ -49,6 +49,12 @@ import {
   startOfMonth,
   endOfMonth,
   subMonths,
+  startOfYear,
+  endOfYear,
+  getDay,
+  getMonth,
+  isSameDay,
+  isAfter,
 } from 'date-fns';
 import { DateRangePicker } from './DateRangePicker';
 
@@ -574,8 +580,263 @@ export function MainDashboard() {
         </>
       )}
 
+      {/* Yearly Activity Chart */}
+      <YearlyActivityChart habits={habits} allEntries={allEntries} />
+
       {/* Streaks Section */}
       <StreaksSection habits={habits} allEntries={allEntries} />
+    </div>
+  );
+}
+
+// Yearly Activity Chart Component (GitHub/LeetCode style)
+function YearlyActivityChart({ habits, allEntries }: { habits: any[]; allEntries: any[] }) {
+  const currentYear = new Date().getFullYear();
+  const [selectedYear, setSelectedYear] = useState(currentYear);
+  
+  // Generate years from 2025 to current year
+  const availableYears = useMemo(() => {
+    const years: number[] = [];
+    for (let year = 2025; year <= currentYear; year++) {
+      years.push(year);
+    }
+    return years;
+  }, [currentYear]);
+  
+  // Calculate daily completion data for the selected year
+  const yearData = useMemo(() => {
+    const yearStart = startOfYear(new Date(selectedYear, 0, 1));
+    const yearEnd = endOfYear(new Date(selectedYear, 0, 1));
+    const today = new Date();
+    
+    // Get all days of the year
+    const allDays = eachDayOfInterval({ start: yearStart, end: yearEnd });
+    
+    // Calculate daily goals for each habit
+    const dailyGoals = new Map<string, number>();
+    for (const habit of habits) {
+      if (habit.type === 'binary') {
+        dailyGoals.set(habit.id, 1);
+      } else {
+        dailyGoals.set(habit.id, habit.weeklyGoal / 7);
+      }
+    }
+    
+    // Group entries by date
+    const entriesByDate = new Map<string, Map<string, number>>();
+    for (const entry of allEntries) {
+      if (!entriesByDate.has(entry.date)) {
+        entriesByDate.set(entry.date, new Map());
+      }
+      const dayEntries = entriesByDate.get(entry.date)!;
+      dayEntries.set(entry.habitId, (dayEntries.get(entry.habitId) || 0) + entry.value);
+    }
+    
+    // Calculate completion for each day
+    return allDays.map(day => {
+      const dateStr = formatDate(day);
+      const dayEntries = entriesByDate.get(dateStr);
+      const isFuture = isAfter(day, today);
+      
+      if (!dayEntries || habits.length === 0 || isFuture) {
+        return {
+          date: day,
+          dateStr,
+          completionLevel: isFuture ? -1 : 0, // -1 for future, 0 for no data
+          completionPercent: 0,
+        };
+      }
+      
+      // Calculate average completion across all habits
+      let totalCompletion = 0;
+      for (const habit of habits) {
+        const value = dayEntries.get(habit.id) || 0;
+        const goal = dailyGoals.get(habit.id) || 1;
+        const completion = Math.min(value / goal, 1);
+        totalCompletion += completion;
+      }
+      const avgCompletion = totalCompletion / habits.length;
+      
+      // Convert to level (0-4)
+      let level = 0;
+      if (avgCompletion >= 1) level = 4;
+      else if (avgCompletion >= 0.75) level = 3;
+      else if (avgCompletion >= 0.5) level = 2;
+      else if (avgCompletion > 0) level = 1;
+      
+      return {
+        date: day,
+        dateStr,
+        completionLevel: level,
+        completionPercent: Math.round(avgCompletion * 100),
+      };
+    });
+  }, [selectedYear, habits, allEntries]);
+  
+  // Group year data by month, each month has its own week structure
+  const monthsData = useMemo(() => {
+    const months: { name: string; weeks: typeof yearData[] }[] = [];
+    
+    // Create 12 months
+    for (let monthIndex = 0; monthIndex < 12; monthIndex++) {
+      const monthStart = new Date(selectedYear, monthIndex, 1);
+      const monthEnd = endOfMonth(monthStart);
+      const monthName = format(monthStart, 'MMM');
+      
+      // Get days for this month from yearData
+      const monthDays = yearData.filter(d => getMonth(d.date) === monthIndex);
+      
+      // Organize into weeks
+      const weeks: typeof yearData[] = [];
+      let currentWeek: typeof yearData = [];
+      
+      // Get the day of week for the first day (0=Sun, 1=Mon, etc.)
+      // Convert to Monday-start (Mon=0, Sun=6)
+      const firstDayOfWeek = getDay(monthStart);
+      const adjustedFirstDay = firstDayOfWeek === 0 ? 6 : firstDayOfWeek - 1;
+      
+      // Pad the beginning with empty cells
+      for (let i = 0; i < adjustedFirstDay; i++) {
+        currentWeek.push({
+          date: new Date(0),
+          dateStr: '',
+          completionLevel: -2,
+          completionPercent: 0,
+        });
+      }
+      
+      // Add all days of the month
+      for (const day of monthDays) {
+        currentWeek.push(day);
+        if (currentWeek.length === 7) {
+          weeks.push(currentWeek);
+          currentWeek = [];
+        }
+      }
+      
+      // Pad the end with empty cells
+      while (currentWeek.length > 0 && currentWeek.length < 7) {
+        currentWeek.push({
+          date: new Date(0),
+          dateStr: '',
+          completionLevel: -2,
+          completionPercent: 0,
+        });
+      }
+      if (currentWeek.length > 0) {
+        weeks.push(currentWeek);
+      }
+      
+      months.push({ name: monthName, weeks });
+    }
+    
+    return months;
+  }, [yearData, selectedYear]);
+  
+  const getLevelColor = (level: number) => {
+    switch (level) {
+      case -2: return 'transparent'; // Empty
+      case -1: return 'rgba(30, 41, 59, 0.3)'; // Future (faded)
+      case 0: return 'rgba(30, 41, 59, 0.8)'; // No activity
+      case 1: return 'rgba(34, 197, 94, 0.3)'; // Low
+      case 2: return 'rgba(34, 197, 94, 0.5)'; // Medium
+      case 3: return 'rgba(34, 197, 94, 0.7)'; // High
+      case 4: return 'rgba(34, 197, 94, 1)'; // Full
+      default: return 'rgba(30, 41, 59, 0.8)';
+    }
+  };
+  
+  const dayLabels = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+  
+  return (
+    <div className="glass rounded-xl sm:rounded-2xl p-3 sm:p-4">
+      <div className="flex items-center justify-between mb-3 sm:mb-4">
+        <div className="flex items-center gap-2">
+          <Calendar className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-400" />
+          <h3 className="text-sm sm:text-base font-semibold text-slate-300">Activity</h3>
+        </div>
+        
+        {/* Year Selector */}
+        <div className="flex items-center gap-2">
+          <select
+            value={selectedYear}
+            onChange={(e) => setSelectedYear(Number(e.target.value))}
+            className="bg-slate-800 border border-slate-700 rounded-lg px-2 sm:px-3 py-1 sm:py-1.5 text-xs sm:text-sm text-slate-300 cursor-pointer hover:border-slate-600 transition-colors"
+          >
+            {availableYears.map(year => (
+              <option key={year} value={year}>{year}</option>
+            ))}
+          </select>
+        </div>
+      </div>
+      
+      {/* Activity Heatmap - Months Layout */}
+      <div className="overflow-x-auto pb-2">
+        <div className="flex gap-3 sm:gap-4">
+          {/* Day Labels Column */}
+          <div className="flex flex-col flex-shrink-0">
+            <div className="h-4 sm:h-5" /> {/* Spacer for month label */}
+            <div className="flex flex-col gap-[1px]">
+              {dayLabels.map((label, i) => (
+                <div 
+                  key={i} 
+                  className="h-[9px] sm:h-[11px] flex items-center justify-end pr-1"
+                >
+                  <span className="text-[7px] sm:text-[8px] text-slate-500 font-medium">
+                    {label}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+          
+          {/* Months */}
+          {monthsData.map((month, monthIndex) => (
+            <div key={monthIndex} className="flex flex-col">
+              {/* Month Label */}
+              <div className="h-4 sm:h-5 flex items-center">
+                <span className="text-[9px] sm:text-[10px] text-slate-400 font-medium">
+                  {month.name}
+                </span>
+              </div>
+              
+              {/* Weeks Grid for this month */}
+              <div className="flex gap-[1px]">
+                {month.weeks.map((week, weekIndex) => (
+                  <div key={weekIndex} className="flex flex-col gap-[1px]">
+                    {week.map((day, dayIndex) => (
+                      <div
+                        key={dayIndex}
+                        className="w-[9px] h-[9px] sm:w-[11px] sm:h-[11px] rounded-[2px] transition-all cursor-default hover:ring-1 hover:ring-white/40 hover:scale-110"
+                        style={{ backgroundColor: getLevelColor(day.completionLevel) }}
+                        title={day.dateStr ? `${format(day.date, 'EEE, MMM d, yyyy')}: ${day.completionPercent}% complete` : ''}
+                      />
+                    ))}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+      
+      {/* Legend */}
+      <div className="flex items-center justify-between mt-3 pt-3 border-t border-slate-700/50">
+        <div className="text-[9px] sm:text-[10px] text-slate-500">
+          {selectedYear} Activity
+        </div>
+        <div className="flex items-center gap-1 sm:gap-1.5 text-[9px] sm:text-[10px] text-slate-500">
+          <span>Less</span>
+          {[0, 1, 2, 3, 4].map(level => (
+            <div
+              key={level}
+              className="w-[9px] h-[9px] sm:w-[11px] sm:h-[11px] rounded-[2px]"
+              style={{ backgroundColor: getLevelColor(level) }}
+            />
+          ))}
+          <span>More</span>
+        </div>
+      </div>
     </div>
   );
 }
