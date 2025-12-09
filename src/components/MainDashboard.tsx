@@ -43,6 +43,7 @@ import {
   startOfWeek,
   endOfWeek,
   startOfMonth,
+  endOfMonth,
   subMonths,
   startOfYear,
   endOfYear,

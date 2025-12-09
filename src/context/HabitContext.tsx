@@ -102,7 +102,6 @@ export function HabitProvider({ children }: { children: React.ReactNode }) {
   // Determine which mode we're in
   const isUsingLocalStorage = !isFirebaseConfigured || !currentUserId;
   const isViewingFriend = viewingUserId !== null && viewingUserId !== currentUserId;
-  const _activeUserId = viewingUserId || currentUserId;
 
   // Set viewing user (for friend dashboards)
   const setViewingUser = useCallback((userId: string | null) => {

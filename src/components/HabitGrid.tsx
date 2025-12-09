@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { Check, Plus, Minus, Edit2, Trash2 } from 'lucide-react';
 import { useHabits } from '../context/HabitContext';
 import {
@@ -6,7 +5,6 @@ import {
   formatDate,
   getDayName,
   formatDisplayDate,
-  isCurrentWeek,
   calculateWeeklyStats,
   getStatusColor,
 } from '../lib/utils';
@@ -20,7 +18,6 @@ export function HabitGrid({ onEditHabit }: HabitGridProps) {
   const { habits, entries, weekStart, updateEntry, getEntryValue, removeHabit } = useHabits();
   const weekDates = getWeekDates(weekStart);
   const today = formatDate(new Date());
-  const _isCurrentWeekView = isCurrentWeek(weekStart);
 
   const handleToggleBinary = async (habitId: string, date: string) => {
     const currentValue = getEntryValue(habitId, date);
