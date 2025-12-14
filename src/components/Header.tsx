@@ -9,7 +9,8 @@ import {
 } from 'lucide-react';
 import { useHabits } from '../context/HabitContext';
 import { useAuth } from '../context/AuthContext';
-import { exportToJSON, exportToCSV, downloadFile, calculateOverallStreak, getStreakLevel, getStreakEmoji } from '../lib/utils';
+import { exportToJSON, exportToCSV, downloadFile, calculateOverallStreak, getStreakLevel } from '../lib/utils';
+import { StreakIcon } from './StreakIcon';
 
 interface HeaderProps {
   onImport: () => void;
@@ -31,7 +32,7 @@ export function Header({ onImport }: HeaderProps) {
   }, [habits, allEntries]);
 
   const streakLevel = getStreakLevel(overallStreak.currentStreak);
-  const streakEmoji = getStreakEmoji(overallStreak.currentStreak);
+  const currentStreak = overallStreak.currentStreak;
 
   const handleExportJSON = () => {
     const json = exportToJSON(habits, allEntries);
@@ -82,15 +83,15 @@ export function Header({ onImport }: HeaderProps) {
             {/* Overall Streak Badge - Color based on current week status */}
             <div 
               className={`relative flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl text-white text-xs sm:text-sm font-bold shadow-lg ${getStreakBadgeClass()}`}
-              title={`Current streak: ${overallStreak.currentStreak} days | This week: ${overallStreak.weeklyStatus}`}
+              title={`Current streak: ${currentStreak} days | This week: ${overallStreak.weeklyStatus}`}
             >
               <span className={`text-base sm:text-lg ${getStreakIconClass()}`}>
-                {streakEmoji}
+                <StreakIcon streak={currentStreak} size="lg" />
               </span>
-              <span className="streak-number text-lg sm:text-xl font-bold">{overallStreak.currentStreak}</span>
+              <span className="streak-number text-lg sm:text-xl font-bold">{currentStreak}</span>
               {/* Special badge for high streaks */}
               {streakLevel === 'immortal' && (
-                <span className="absolute -top-2 -right-2 text-base animate-pulse">🌟</span>
+                <span className="absolute -top-2 -right-2 text-base animate-pulse"><Trophy className="w-4 h-4 text-yellow-400 fill-yellow-400" /></span>
               )}
               {streakLevel === 'mythic' && (
                 <span className="absolute -top-1.5 -right-1.5 text-sm">💎</span>

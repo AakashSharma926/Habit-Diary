@@ -19,9 +19,9 @@ import {
   formatDate, 
   calculateOverallStreak,
   calculateHabitStreak,
-  getStreakEmoji,
   isEntryComplete
 } from '../lib/utils';
+import { StreakIcon } from './StreakIcon';
 import {
   format,
   subDays,
@@ -206,8 +206,21 @@ export function ReportsView() {
     }
   };
 
+  // Get text emoji for reports (for sharing as text)
+  const getTextEmoji = (streak: number): string => {
+    if (streak >= 365) return '⭐';
+    if (streak >= 100) return '💎';
+    if (streak >= 60) return '👑';
+    if (streak >= 30) return '🔥';
+    if (streak >= 14) return '🏆';
+    if (streak >= 7) return '⚡';
+    if (streak >= 3) return '✨';
+    if (streak > 0) return '🌱';
+    return '💤';
+  };
+
   const generateReportText = (data: ReportData): string => {
-    const streakEmoji = getStreakEmoji(data.overallStreak);
+    const emoji = getTextEmoji(data.overallStreak);
     
     let text = `🎯 Habit Diary Report\n`;
     text += `🌱 ${data.period}\n\n`;
@@ -215,7 +228,7 @@ export function ReportsView() {
     text += `📊 Overview\n`;
     text += `• Completion Rate: ${data.overallCompletionRate.toFixed(1)}%\n`;
     text += `• Perfect Days: ${data.perfectDays}/${data.totalDays}\n`;
-    text += `• Current Streak: ${streakEmoji} ${data.overallStreak} days\n`;
+    text += `• Current Streak: ${emoji} ${data.overallStreak} days\n`;
     text += `• Best Streak: 🏆 ${data.maxStreak} days\n\n`;
     
     text += `📈 Habit Breakdown\n`;
@@ -259,8 +272,6 @@ export function ReportsView() {
     if (daysDiff <= 180) return 'Half Year';
     return 'Custom';
   };
-
-  const streakEmoji = getStreakEmoji(reportData.overallStreak);
 
   return (
     <div className="space-y-6">
@@ -335,7 +346,7 @@ export function ReportsView() {
             Current Streak
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-xl">{streakEmoji}</span>
+            <StreakIcon streak={reportData.overallStreak} size="xl" />
             <span className="text-2xl sm:text-3xl font-bold text-orange-400">
               {reportData.overallStreak}
             </span>

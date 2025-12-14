@@ -29,10 +29,10 @@ import {
   calculateHabitStreak,
   calculateOverallStreak,
   getStreakLevel,
-  getStreakEmoji,
   getEffectiveDailyGoal,
   isEntryComplete,
 } from '../lib/utils';
+import { StreakIcon } from './StreakIcon';
 import { 
   format, 
   eachDayOfInterval,
@@ -905,7 +905,7 @@ function StreaksSection({ habits, allEntries }: { habits: any[]; allEntries: any
             <div className="text-center">
               <div className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl font-bold ${getStreakClass(overallStreak.currentStreak)}`}>
                 <span className={`text-lg sm:text-xl ${getIconClass(overallStreak.currentStreak)}`}>
-                  {getStreakEmoji(overallStreak.currentStreak)}
+                  <StreakIcon streak={overallStreak.currentStreak} size="xl" />
                 </span>
                 <span className="text-xl sm:text-2xl">{overallStreak.currentStreak}</span>
               </div>
@@ -946,7 +946,7 @@ function StreaksSection({ habits, allEntries }: { habits: any[]; allEntries: any
               </div>
               <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
                 <div className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs sm:text-sm font-bold ${getStreakClass(currentStreak)}`}>
-                  <span className={getIconClass(currentStreak)}>{getStreakEmoji(currentStreak)}</span>
+                  <span className={getIconClass(currentStreak)}><StreakIcon streak={currentStreak} size="sm" /></span>
                   <span>{currentStreak}</span>
                 </div>
                 {maxStreak > 0 && (
@@ -961,34 +961,90 @@ function StreaksSection({ habits, allEntries }: { habits: any[]; allEntries: any
         })}
       </div>
 
-      {/* Streak Legend */}
-      <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-3 mt-3 sm:mt-4 pt-3 border-t border-slate-700/50">
-        <div className="flex items-center gap-1 text-[10px] sm:text-xs text-slate-500">
-          <span>🌟</span> <span>365+</span>
-        </div>
-        <div className="flex items-center gap-1 text-[10px] sm:text-xs text-slate-500">
-          <span>💎</span> <span>100+</span>
-        </div>
-        <div className="flex items-center gap-1 text-[10px] sm:text-xs text-slate-500">
-          <span>👑</span> <span>60+</span>
-        </div>
-        <div className="flex items-center gap-1 text-[10px] sm:text-xs text-slate-500">
-          <span>🔥</span> <span>30+</span>
-        </div>
-        <div className="flex items-center gap-1 text-[10px] sm:text-xs text-slate-500">
-          <span>⭐</span> <span>14+</span>
-        </div>
-        <div className="flex items-center gap-1 text-[10px] sm:text-xs text-slate-500">
-          <span>💫</span> <span>7+</span>
-        </div>
-        <div className="flex items-center gap-1 text-[10px] sm:text-xs text-slate-500">
-          <span>✨</span> <span>3+</span>
-        </div>
-        <div className="flex items-center gap-1 text-[10px] sm:text-xs text-slate-500">
-          <span>🌱</span> <span>1+</span>
-        </div>
-        <div className="flex items-center gap-1 text-[10px] sm:text-xs text-slate-500">
-          <span>💤</span> <span>0</span>
+      {/* Streak Milestones & Legend */}
+      <div className="mt-3 sm:mt-4 pt-3 border-t border-slate-700/50">
+        <div className="text-xs text-slate-400 text-center mb-3">Streak Milestones</div>
+        <div className="grid grid-cols-3 sm:grid-cols-5 lg:grid-cols-9 gap-2 sm:gap-3">
+          {/* 365+ Immortal */}
+          <div className="flex flex-col items-center gap-1 p-2 rounded-lg bg-slate-800/30 border border-slate-700/30">
+            <div className="streak-immortal p-1.5 rounded-lg">
+              <StreakIcon streak={365} size="md" />
+            </div>
+            <span className="text-[10px] text-slate-400">365+</span>
+            <span className="text-[8px] text-yellow-400">Immortal</span>
+          </div>
+          
+          {/* 100+ Mythic */}
+          <div className="flex flex-col items-center gap-1 p-2 rounded-lg bg-slate-800/30 border border-slate-700/30">
+            <div className="streak-mythic p-1.5 rounded-lg">
+              <StreakIcon streak={100} size="md" />
+            </div>
+            <span className="text-[10px] text-slate-400">100+</span>
+            <span className="text-[8px] text-cyan-400">Mythic</span>
+          </div>
+          
+          {/* 60+ Legendary */}
+          <div className="flex flex-col items-center gap-1 p-2 rounded-lg bg-slate-800/30 border border-slate-700/30">
+            <div className="streak-legendary p-1.5 rounded-lg">
+              <StreakIcon streak={60} size="md" />
+            </div>
+            <span className="text-[10px] text-slate-400">60+</span>
+            <span className="text-[8px] text-purple-400">Legendary</span>
+          </div>
+          
+          {/* 30+ Fire */}
+          <div className="flex flex-col items-center gap-1 p-2 rounded-lg bg-slate-800/30 border border-slate-700/30">
+            <div className="flame-animate p-1.5 rounded-lg bg-gradient-to-r from-orange-500/20 to-red-500/20">
+              <StreakIcon streak={30} size="md" />
+            </div>
+            <span className="text-[10px] text-slate-400">30+</span>
+            <span className="text-[8px] text-orange-400">Fire</span>
+          </div>
+          
+          {/* 14+ Gold */}
+          <div className="flex flex-col items-center gap-1 p-2 rounded-lg bg-slate-800/30 border border-slate-700/30">
+            <div className="p-1.5 rounded-lg bg-amber-500/10">
+              <StreakIcon streak={14} size="md" />
+            </div>
+            <span className="text-[10px] text-slate-400">14+</span>
+            <span className="text-[8px] text-amber-400">Gold</span>
+          </div>
+          
+          {/* 7+ Silver */}
+          <div className="flex flex-col items-center gap-1 p-2 rounded-lg bg-slate-800/30 border border-slate-700/30">
+            <div className="p-1.5 rounded-lg bg-violet-500/10">
+              <StreakIcon streak={7} size="md" />
+            </div>
+            <span className="text-[10px] text-slate-400">7+</span>
+            <span className="text-[8px] text-violet-400">Silver</span>
+          </div>
+          
+          {/* 3+ Bronze */}
+          <div className="flex flex-col items-center gap-1 p-2 rounded-lg bg-slate-800/30 border border-slate-700/30">
+            <div className="p-1.5 rounded-lg bg-emerald-500/10">
+              <StreakIcon streak={3} size="md" />
+            </div>
+            <span className="text-[10px] text-slate-400">3+</span>
+            <span className="text-[8px] text-emerald-400">Bronze</span>
+          </div>
+          
+          {/* 1+ Starter */}
+          <div className="flex flex-col items-center gap-1 p-2 rounded-lg bg-slate-800/30 border border-slate-700/30">
+            <div className="p-1.5 rounded-lg bg-green-500/10">
+              <StreakIcon streak={1} size="md" />
+            </div>
+            <span className="text-[10px] text-slate-400">1+</span>
+            <span className="text-[8px] text-green-400">Starter</span>
+          </div>
+          
+          {/* 0 Inactive */}
+          <div className="flex flex-col items-center gap-1 p-2 rounded-lg bg-slate-800/30 border border-slate-700/30">
+            <div className="p-1.5 rounded-lg bg-slate-700/30">
+              <StreakIcon streak={0} size="md" />
+            </div>
+            <span className="text-[10px] text-slate-400">0</span>
+            <span className="text-[8px] text-slate-500">Inactive</span>
+          </div>
         </div>
       </div>
     </div>

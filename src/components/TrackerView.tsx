@@ -1,8 +1,9 @@
 import React, { useState, useMemo } from 'react';
 import { useHabits } from '../context/HabitContext';
-import { formatDate, getDaysOfWeek, getWeekStart, formatWeekRange, isCurrentWeek, calculateHabitStreak, getStreakLevel, getStreakEmoji, isDateEditable } from '../lib/utils';
-import { Check, Minus, ChevronLeft, ChevronRight, Calendar, Flame, Lock } from 'lucide-react';
+import { formatDate, getDaysOfWeek, getWeekStart, formatWeekRange, isCurrentWeek, calculateHabitStreak, getStreakLevel, isDateEditable } from '../lib/utils';
+import { Check, Minus, ChevronLeft, ChevronRight, Calendar, Lock, Flame } from 'lucide-react';
 import { SimpleCalendarPicker } from './SimpleCalendarPicker';
+import { StreakIcon } from './StreakIcon';
 import type { Habit } from '../types';
 
 interface TrackerViewProps {
@@ -274,7 +275,7 @@ export function TrackerView({ onEditHabit }: TrackerViewProps) {
           const { color: statusColor, status } = getPacingStatus(habit);
           const streak = habitStreaks[habit.id];
           const streakLevel = getStreakLevel(streak?.currentStreak || 0);
-          const emoji = getStreakEmoji(streak?.currentStreak || 0);
+          const currentStreak = streak?.currentStreak || 0;
 
           return (
             <div key={habit.id} className="glass rounded-xl overflow-hidden">
@@ -303,12 +304,12 @@ export function TrackerView({ onEditHabit }: TrackerViewProps) {
                                     : 'bg-gradient-to-b from-emerald-500/30 to-green-500/30 text-emerald-400'
                         : 'bg-slate-700/50 text-slate-500'
                     }`}
-                    title={`Streak: ${streak?.currentStreak || 0} days | Best: ${streak?.maxStreak || 0}`}
+                    title={`Streak: ${currentStreak} days | Best: ${streak?.maxStreak || 0}`}
                   >
                     <span className={`${streakLevel === 'fire' || streakLevel === 'mythic' || streakLevel === 'immortal' ? 'flame-animate' : ''} ${streakLevel === 'immortal' || streakLevel === 'mythic' ? 'streak-icon' : ''}`}>
-                      {emoji}
+                      <StreakIcon streak={currentStreak} size="sm" />
                     </span>
-                    <span>{streak?.currentStreak || 0}</span>
+                    <span>{currentStreak}</span>
                   </div>
                   <div 
                     className="w-10 h-10 rounded-lg flex items-center justify-center text-xl"
@@ -429,7 +430,7 @@ export function TrackerView({ onEditHabit }: TrackerViewProps) {
             const { color: statusColor, status } = getPacingStatus(habit);
             const streak = habitStreaks[habit.id];
             const streakLevel = getStreakLevel(streak?.currentStreak || 0);
-            const emoji = getStreakEmoji(streak?.currentStreak || 0);
+            const currentStreak = streak?.currentStreak || 0;
 
             return (
               <React.Fragment key={habit.id}>
@@ -452,7 +453,7 @@ export function TrackerView({ onEditHabit }: TrackerViewProps) {
                       ? 'flame-animate streak-icon' 
                       : ''
                   }`}>
-                    {emoji}
+                    <StreakIcon streak={currentStreak} size="md" />
                   </span>
                   <span className={`text-xs lg:text-sm font-bold ${
                     streakLevel === 'fire' || streakLevel === 'legendary' || streakLevel === 'mythic' || streakLevel === 'immortal'
