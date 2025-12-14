@@ -128,31 +128,30 @@ export function TrackerView({ onEditHabit }: TrackerViewProps) {
     goToWeek(getWeekStart(date));
   };
 
-  // Get input field styling based on value and status
-  const getInputStyle = (habit: Habit, value: number, dayDate: string, weeklyStatus: string) => {
+  // Get input field styling based on value and daily completion percentage
+  // Green: 100%+ of daily goal (completed)
+  // Amber: 80-99% of daily goal (warning)
+  // Red: <80% of daily goal (below target)
+  // Gray: no value entered
+  const getInputStyle = (habit: Habit, value: number, _dayDate: string, _weeklyStatus: string) => {
     const dailyGoal = habit.weeklyGoal / 7;
-    const isPast = dayDate < today;
-    const isCompleted = habit.type === 'binary' ? value >= 1 : value >= dailyGoal;
     
-    // For past days that weren't completed and habit is behind/warning
-    if (isPast && !isCompleted && (weeklyStatus === 'behind' || weeklyStatus === 'warning')) {
-      if (weeklyStatus === 'behind') {
-        return {
-          bg: 'bg-red-900/30',
-          border: 'border-red-500/50',
-          text: value > 0 ? 'text-red-400' : 'text-red-400/60'
-        };
-      } else {
-        return {
-          bg: 'bg-amber-900/30',
-          border: 'border-amber-500/50',
-          text: value > 0 ? 'text-amber-400' : 'text-amber-400/60'
-        };
-      }
+    // No value entered - gray/neutral
+    if (value === 0) {
+      return {
+        bg: 'bg-slate-700',
+        border: 'border-slate-600',
+        text: 'text-slate-500'
+      };
     }
     
-    // Completed - green
-    if (isCompleted) {
+    // Calculate completion percentage
+    const completionPercent = habit.type === 'binary' 
+      ? (value >= 1 ? 100 : 0)
+      : dailyGoal > 0 ? (value / dailyGoal) * 100 : 0;
+    
+    // 100%+ - Green (completed)
+    if (completionPercent >= 100) {
       return {
         bg: 'bg-emerald-900/30',
         border: 'border-emerald-500/50',
@@ -160,31 +159,30 @@ export function TrackerView({ onEditHabit }: TrackerViewProps) {
       };
     }
     
-    // Not completed - grey
+    // 80-99% - Amber (warning)
+    if (completionPercent >= 80) {
+      return {
+        bg: 'bg-amber-900/30',
+        border: 'border-amber-500/50',
+        text: 'text-amber-400'
+      };
+    }
+    
+    // <80% - Red (below target)
     return {
-      bg: 'bg-slate-700',
-      border: 'border-slate-600',
-      text: value > 0 ? 'text-slate-300' : 'text-slate-500'
+      bg: 'bg-red-900/30',
+      border: 'border-red-500/50',
+      text: 'text-red-400'
     };
   };
 
-  // Get button styling for binary habits
-  const getBinaryButtonStyle = (_habit: Habit, value: number, dayDate: string, weeklyStatus: string) => {
-    const isPast = dayDate < today;
+  // Get button styling for binary habits - simple: green if done, gray if not
+  const getBinaryButtonStyle = (_habit: Habit, value: number, _dayDate: string, _weeklyStatus: string) => {
     const isCompleted = value >= 1;
     
     // Completed - green
     if (isCompleted) {
       return 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/30';
-    }
-    
-    // For past days that weren't completed and habit is behind/warning
-    if (isPast && (weeklyStatus === 'behind' || weeklyStatus === 'warning')) {
-      if (weeklyStatus === 'behind') {
-        return 'bg-red-900/50 text-red-400 border border-red-500/50';
-      } else {
-        return 'bg-amber-900/50 text-amber-400 border border-amber-500/50';
-      }
     }
     
     // Not completed - grey
