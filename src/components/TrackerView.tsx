@@ -131,13 +131,23 @@ export function TrackerView({ onEditHabit }: TrackerViewProps) {
   // Get input field styling based on value and daily completion percentage
   // Green: 100%+ of daily goal (completed)
   // Amber: 80-99% of daily goal (warning)
-  // Red: <80% of daily goal (below target)
-  // Gray: no value entered
-  const getInputStyle = (habit: Habit, value: number, _dayDate: string, _weeklyStatus: string) => {
+  // Red: <80% of daily goal OR missed day (past day with 0)
+  // Gray: no value entered (only for today/future)
+  const getInputStyle = (habit: Habit, value: number, dayDate: string, _weeklyStatus: string) => {
     const dailyGoal = habit.weeklyGoal / 7;
+    const isPast = dayDate < today;
     
-    // No value entered - gray/neutral
+    // No value entered
     if (value === 0) {
+      // Past day with no entry = missed = red
+      if (isPast) {
+        return {
+          bg: 'bg-red-900/30',
+          border: 'border-red-500/50',
+          text: 'text-red-400/60'
+        };
+      }
+      // Today/future with no entry = gray/neutral
       return {
         bg: 'bg-slate-700',
         border: 'border-slate-600',
@@ -176,16 +186,23 @@ export function TrackerView({ onEditHabit }: TrackerViewProps) {
     };
   };
 
-  // Get button styling for binary habits - simple: green if done, gray if not
-  const getBinaryButtonStyle = (_habit: Habit, value: number, _dayDate: string, _weeklyStatus: string) => {
+  // Get button styling for binary habits
+  // Green if done, red if missed (past), gray if not done yet (today/future)
+  const getBinaryButtonStyle = (_habit: Habit, value: number, dayDate: string, _weeklyStatus: string) => {
     const isCompleted = value >= 1;
+    const isPast = dayDate < today;
     
     // Completed - green
     if (isCompleted) {
       return 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/30';
     }
     
-    // Not completed - grey
+    // Past day not completed = missed = red
+    if (isPast) {
+      return 'bg-red-900/50 text-red-400 border border-red-500/50';
+    }
+    
+    // Today/future not completed - grey
     return 'bg-slate-700 text-slate-500';
   };
 
