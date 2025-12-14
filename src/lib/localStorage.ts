@@ -86,9 +86,12 @@ export async function upsertEntryLocal(entry: DailyEntry): Promise<void> {
   );
 
   if (existingIndex !== -1) {
+    // Keep the original targetAtEntry if not provided in update (preserve historical target)
+    const existingTarget = data.entries[existingIndex].targetAtEntry;
     data.entries[existingIndex] = {
       ...data.entries[existingIndex],
       value: entry.value,
+      targetAtEntry: entry.targetAtEntry ?? existingTarget,
       updatedAt: new Date().toISOString(),
     };
   } else {

@@ -288,11 +288,16 @@ export function HabitProvider({ children }: { children: React.ReactNode }) {
     }
     
     try {
+      // Find the habit to capture the current daily goal
+      const habit = habits.find(h => h.id === habitId);
+      const targetAtEntry = habit ? (habit.type === 'binary' ? 1 : habit.weeklyGoal / 7) : undefined;
+      
       const entry: DailyEntry = {
         id: `${habitId}_${date}`,
         habitId,
         date,
         value,
+        targetAtEntry,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
@@ -309,7 +314,7 @@ export function HabitProvider({ children }: { children: React.ReactNode }) {
       setError('Failed to update entry');
       throw err;
     }
-  }, [loadAllEntries, isUsingLocalStorage, currentUserId, isViewingFriend]);
+  }, [habits, loadAllEntries, isUsingLocalStorage, currentUserId, isViewingFriend]);
 
   const getEntryValue = useCallback((habitId: string, date: string): number => {
     const entry = entries.find((e) => e.habitId === habitId && e.date === date);
@@ -419,11 +424,13 @@ export function HabitProvider({ children }: { children: React.ReactNode }) {
           }
 
           if (value > 0) {
+            const targetAtEntry = habit.type === 'binary' ? 1 : dailyGoal;
             const entry: DailyEntry = {
               id: `${habit.id}_${dateStr}`,
               habitId: habit.id,
               date: dateStr,
               value,
+              targetAtEntry,
               createdAt: new Date().toISOString(),
               updatedAt: new Date().toISOString(),
             };

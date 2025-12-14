@@ -16,6 +16,40 @@ import type { Habit, DailyEntry, WeeklyStats, OverallStats, StreakData } from '.
 
 // ============ DATE UTILITIES ============
 
+/**
+ * Check if a date is editable based on the 6-hour grace period rule:
+ * - Today is always editable
+ * - Yesterday is editable until 6 AM today
+ * - Future dates are not editable
+ * - All other past dates are locked
+ */
+export function isDateEditable(dateStr: string): boolean {
+  const now = new Date();
+  const today = formatDate(new Date());
+  const targetDate = parseISO(dateStr);
+  const targetDateStr = formatDate(targetDate);
+  
+  // Future dates are not editable
+  if (targetDateStr > today) {
+    return false;
+  }
+  
+  // Today is always editable
+  if (targetDateStr === today) {
+    return true;
+  }
+  
+  // Yesterday check: editable if current time is before 6 AM
+  const yesterday = formatDate(subDays(new Date(), 1));
+  if (targetDateStr === yesterday) {
+    const currentHour = now.getHours();
+    return currentHour < 6; // Editable from 12 AM to 6 AM
+  }
+  
+  // All other past dates are locked
+  return false;
+}
+
 export function getWeekStart(date: Date = new Date()): Date {
   return startOfWeek(date, { weekStartsOn: 1 }); // Monday
 }
@@ -81,6 +115,43 @@ export function getRemainingDaysInWeek(weekStart: Date): number {
 }
 
 // ============ STATS CALCULATIONS ============
+
+/**
+ * Get the effective daily goal for an entry.
+ * Uses targetAtEntry (snapshot at time of entry) if available,
+ * otherwise falls back to the current habit's goal.
+ * This ensures historical data is evaluated correctly even if goals change.
+ */
+export function getEffectiveDailyGoal(
+  entry: DailyEntry,
+  habit: Habit
+): number {
+  // Use stored target if available (for historical accuracy)
+  if (entry.targetAtEntry !== undefined) {
+    return entry.targetAtEntry;
+  }
+  // Fall back to current habit goal
+  return habit.type === 'binary' ? 1 : habit.weeklyGoal / 7;
+}
+
+/**
+ * Check if an entry meets its daily goal.
+ * For binary habits: value >= 1
+ * For numeric habits: value >= 80% of daily goal
+ */
+export function isEntryComplete(
+  entry: DailyEntry,
+  habit: Habit
+): boolean {
+  const dailyGoal = getEffectiveDailyGoal(entry, habit);
+  const value = entry.value || 0;
+  
+  if (habit.type === 'binary') {
+    return value >= 1;
+  }
+  // For numeric, allow 80% threshold
+  return value >= dailyGoal * 0.8;
+}
 
 export function calculateWeeklyStats(
   habit: Habit,
@@ -156,9 +227,9 @@ export function calculateOverallStats(
     if (isBefore(new Date(), date) && !isToday(date)) return false;
     
     return habits.every((habit) => {
-      const dailyTarget = habit.weeklyGoal / 7;
       const entry = entries.find((e) => e.habitId === habit.id && e.date === dateStr);
-      return (entry?.value || 0) >= dailyTarget;
+      if (!entry) return false;
+      return isEntryComplete(entry, habit);
     });
   }).length;
   
@@ -375,25 +446,15 @@ export function calculateHabitStreak(
     return { currentStreak: 0, maxStreak: 0 };
   }
 
-  const dailyGoal = habit.weeklyGoal / 7;
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   
   // Build a map of dates with successful completions
+  // Uses targetAtEntry for historical accuracy
   const successDates = new Set<string>();
   
   for (const entry of habitEntries) {
-    const value = entry.value || 0;
-    let isSuccess = false;
-    
-    if (habit.type === 'binary') {
-      isSuccess = value >= 1;
-    } else {
-      // For numeric, need at least 80% of daily goal
-      isSuccess = value >= dailyGoal * 0.8;
-    }
-    
-    if (isSuccess) {
+    if (isEntryComplete(entry, habit)) {
       successDates.add(entry.date);
     }
   }
@@ -462,42 +523,32 @@ export function calculateOverallStreak(
   const todayStr = formatDate(today);
   const currentWeekStart = getWeekStart(today);
   
-  // Group entries by date for daily calculations
-  const dailyTotals = new Map<string, Map<string, number>>(); // date -> habitId -> value
+  // Group entries by date and habitId for daily calculations
+  // Store full entries to access targetAtEntry
+  const entriesByDateAndHabit = new Map<string, Map<string, DailyEntry>>(); // date -> habitId -> entry
   
   for (const entry of entries) {
-    if (!dailyTotals.has(entry.date)) {
-      dailyTotals.set(entry.date, new Map());
+    if (!entriesByDateAndHabit.has(entry.date)) {
+      entriesByDateAndHabit.set(entry.date, new Map());
     }
-    const habitTotals = dailyTotals.get(entry.date)!;
-    habitTotals.set(entry.habitId, (habitTotals.get(entry.habitId) || 0) + entry.value);
-  }
-  
-  // Calculate daily goal thresholds for each habit
-  // For binary: 1 completion = done
-  // For numeric: daily goal = weeklyGoal / 7
-  const dailyGoals = new Map<string, number>();
-  for (const habit of habits) {
-    if (habit.type === 'binary') {
-      dailyGoals.set(habit.id, 1);
-    } else {
-      dailyGoals.set(habit.id, habit.weeklyGoal / 7);
+    const dayEntries = entriesByDateAndHabit.get(entry.date)!;
+    // Keep the entry with highest value if multiple exist for same day
+    const existing = dayEntries.get(entry.habitId);
+    if (!existing || entry.value > existing.value) {
+      dayEntries.set(entry.habitId, entry);
     }
   }
   
   // Check if a day is "perfect" (all habits met their daily goal)
+  // Uses targetAtEntry for historical accuracy
   const isPerfectDay = (dateStr: string): boolean => {
-    const dayTotals = dailyTotals.get(dateStr);
-    if (!dayTotals) return false;
+    const dayEntries = entriesByDateAndHabit.get(dateStr);
+    if (!dayEntries) return false;
     
     for (const habit of habits) {
-      const value = dayTotals.get(habit.id) || 0;
-      const goal = dailyGoals.get(habit.id) || 0;
-      // Allow 80% completion for numeric habits
-      const threshold = habit.type === 'binary' ? goal : goal * 0.8;
-      if (value < threshold) {
-        return false;
-      }
+      const entry = dayEntries.get(habit.id);
+      if (!entry) return false;
+      if (!isEntryComplete(entry, habit)) return false;
     }
     return true;
   };
@@ -529,7 +580,7 @@ export function calculateOverallStreak(
   // Calculate max streak by checking all days
   let maxStreak = 0;
   let tempStreak = 0;
-  const allDates = Array.from(dailyTotals.keys()).sort();
+  const allDates = Array.from(entriesByDateAndHabit.keys()).sort();
   
   for (let i = 0; i < allDates.length; i++) {
     if (isPerfectDay(allDates[i])) {

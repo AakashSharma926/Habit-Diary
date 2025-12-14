@@ -30,6 +30,8 @@ import {
   calculateOverallStreak,
   getStreakLevel,
   getStreakEmoji,
+  getEffectiveDailyGoal,
+  isEntryComplete,
 } from '../lib/utils';
 import { 
   format, 
@@ -134,6 +136,7 @@ export function MainDashboard() {
     const habitsOnTrack = habitStats.filter(h => h.isOnTrack).length;
 
     // Days with all habits completed (perfect days)
+    // Uses targetAtEntry for historical accuracy when available
     const daysInInterval = eachDayOfInterval({ start: dateRange.from, end: dateRange.to });
     let perfectDays = 0;
     
@@ -142,14 +145,9 @@ export function MainDashboard() {
       let allHabitsHit = true;
       
       filteredHabits.forEach(habit => {
-        const dailyGoal = habit.weeklyGoal / 7;
         const entry = rangeEntries.find(e => e.habitId === habit.id && e.date === dayStr);
-        const value = entry?.value || 0;
-        
-        if (habit.type === 'binary') {
-          if (value < 1) allHabitsHit = false;
-        } else {
-          if (value < dailyGoal * 0.8) allHabitsHit = false; // 80% of daily goal
+        if (!entry || !isEntryComplete(entry, habit)) {
+          allHabitsHit = false;
         }
       });
       
@@ -168,17 +166,20 @@ export function MainDashboard() {
   }, [dateRange, allEntries, filteredHabits]);
 
   // Trend data - daily breakdown within the range
+  // Uses targetAtEntry for historical accuracy
   const trendData = useMemo(() => {
     const days = eachDayOfInterval({ start: dateRange.from, end: dateRange.to });
 
     return days.map(day => {
       const dayStr = formatDate(day);
       
-      // Calculate completion for this day
+      // Calculate completion for this day using entry's stored target
       const dayStats = filteredHabits.map(habit => {
         const entry = allEntries.find(e => e.habitId === habit.id && e.date === dayStr);
-        const value = entry?.value || 0;
-        const dailyGoal = habit.weeklyGoal / 7;
+        if (!entry) return 0;
+        
+        const value = entry.value || 0;
+        const dailyGoal = getEffectiveDailyGoal(entry, habit);
         
         // For binary habits, 1 = 100%, 0 = 0%
         // For numeric habits, calculate percentage based on daily goal
@@ -599,6 +600,7 @@ function YearlyActivityChart({ habits, allEntries }: { habits: any[]; allEntries
   }, [currentYear]);
   
   // Calculate daily completion data for the selected year
+  // Uses targetAtEntry for historical accuracy when available
   const yearData = useMemo(() => {
     const yearStart = startOfYear(new Date(selectedYear, 0, 1));
     const yearEnd = endOfYear(new Date(selectedYear, 0, 1));
@@ -607,30 +609,24 @@ function YearlyActivityChart({ habits, allEntries }: { habits: any[]; allEntries
     // Get all days of the year
     const allDays = eachDayOfInterval({ start: yearStart, end: yearEnd });
     
-    // Calculate daily goals for each habit
-    const dailyGoals = new Map<string, number>();
-    for (const habit of habits) {
-      if (habit.type === 'binary') {
-        dailyGoals.set(habit.id, 1);
-      } else {
-        dailyGoals.set(habit.id, habit.weeklyGoal / 7);
-      }
-    }
-    
-    // Group entries by date
-    const entriesByDate = new Map<string, Map<string, number>>();
+    // Group entries by date and habit (store full entry for targetAtEntry access)
+    const entriesByDateAndHabit = new Map<string, Map<string, typeof allEntries[0]>>();
     for (const entry of allEntries) {
-      if (!entriesByDate.has(entry.date)) {
-        entriesByDate.set(entry.date, new Map());
+      if (!entriesByDateAndHabit.has(entry.date)) {
+        entriesByDateAndHabit.set(entry.date, new Map());
       }
-      const dayEntries = entriesByDate.get(entry.date)!;
-      dayEntries.set(entry.habitId, (dayEntries.get(entry.habitId) || 0) + entry.value);
+      const dayEntries = entriesByDateAndHabit.get(entry.date)!;
+      // Keep the entry with highest value if multiple exist
+      const existing = dayEntries.get(entry.habitId);
+      if (!existing || entry.value > existing.value) {
+        dayEntries.set(entry.habitId, entry);
+      }
     }
     
     // Calculate completion for each day
     return allDays.map(day => {
       const dateStr = formatDate(day);
-      const dayEntries = entriesByDate.get(dateStr);
+      const dayEntries = entriesByDateAndHabit.get(dateStr);
       const isFuture = isAfter(day, today);
       
       if (!dayEntries || habits.length === 0 || isFuture) {
@@ -642,15 +638,21 @@ function YearlyActivityChart({ habits, allEntries }: { habits: any[]; allEntries
         };
       }
       
-      // Calculate average completion across all habits
+      // Calculate average completion across all habits using targetAtEntry
       let totalCompletion = 0;
       for (const habit of habits) {
-        const value = dayEntries.get(habit.id) || 0;
-        const goal = dailyGoals.get(habit.id) || 1;
-        const completion = Math.min(value / goal, 1);
+        const entry = dayEntries.get(habit.id);
+        if (!entry) {
+          // No entry for this habit on this day
+          continue;
+        }
+        const value = entry.value || 0;
+        // Use stored target or fall back to current goal
+        const goal = getEffectiveDailyGoal(entry, habit);
+        const completion = goal > 0 ? Math.min(value / goal, 1) : 0;
         totalCompletion += completion;
       }
-      const avgCompletion = totalCompletion / habits.length;
+      const avgCompletion = habits.length > 0 ? totalCompletion / habits.length : 0;
       
       // Convert to level (0-4)
       let level = 0;

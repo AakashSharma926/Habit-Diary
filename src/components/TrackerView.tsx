@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { useHabits } from '../context/HabitContext';
-import { formatDate, getDaysOfWeek, getWeekStart, formatWeekRange, isCurrentWeek, calculateHabitStreak, getStreakLevel, getStreakEmoji } from '../lib/utils';
-import { Check, Minus, ChevronLeft, ChevronRight, Calendar, Flame } from 'lucide-react';
+import { formatDate, getDaysOfWeek, getWeekStart, formatWeekRange, isCurrentWeek, calculateHabitStreak, getStreakLevel, getStreakEmoji, isDateEditable } from '../lib/utils';
+import { Check, Minus, ChevronLeft, ChevronRight, Calendar, Flame, Lock } from 'lucide-react';
 import { SimpleCalendarPicker } from './SimpleCalendarPicker';
 import type { Habit } from '../types';
 
@@ -32,8 +32,40 @@ export function TrackerView({ onEditHabit }: TrackerViewProps) {
     ? daysOfWeek.findIndex((d) => d.date === today) + 1
     : 7; // If viewing past week, consider all 7 days
 
-  const handleValueChange = async (habitId: string, date: string, value: number) => {
-    await updateEntry(habitId, date, value);
+  // Track pending values for numeric inputs (allows empty field during editing)
+  const [pendingValues, setPendingValues] = useState<Record<string, string>>({});
+  
+  // Handle numeric input change - allows empty field during editing
+  const handleNumericInputChange = (habitId: string, date: string, inputValue: string) => {
+    const key = `${habitId}_${date}`;
+    setPendingValues(prev => ({ ...prev, [key]: inputValue }));
+  };
+  
+  // Handle blur - commit the value
+  const handleNumericInputBlur = async (habitId: string, date: string) => {
+    const key = `${habitId}_${date}`;
+    const pendingValue = pendingValues[key];
+    
+    if (pendingValue !== undefined) {
+      const numValue = parseFloat(pendingValue) || 0;
+      await updateEntry(habitId, date, numValue);
+      // Clear pending value
+      setPendingValues(prev => {
+        const newState = { ...prev };
+        delete newState[key];
+        return newState;
+      });
+    }
+  };
+  
+  // Get display value for numeric input
+  const getNumericDisplayValue = (habitId: string, date: string): string => {
+    const key = `${habitId}_${date}`;
+    if (pendingValues[key] !== undefined) {
+      return pendingValues[key];
+    }
+    const value = getEntryValue(habitId, date);
+    return value ? String(value) : '';
   };
 
   const toggleBinary = async (habitId: string, date: string) => {
@@ -298,6 +330,7 @@ export function TrackerView({ onEditHabit }: TrackerViewProps) {
                   const value = getEntryValue(habit.id, day.date);
                   const isToday = day.date === today;
                   const isFuture = day.date > today;
+                  const isEditable = isDateEditable(day.date);
                   const inputStyle = getInputStyle(habit, value, day.date, status);
                   const buttonStyle = getBinaryButtonStyle(habit, value, day.date, status);
 
@@ -306,7 +339,7 @@ export function TrackerView({ onEditHabit }: TrackerViewProps) {
                       key={day.date}
                       className={`bg-slate-800/60 p-2 flex flex-col items-center ${
                         isToday ? 'bg-violet-900/30' : ''
-                      } ${isFuture ? 'opacity-40' : ''}`}
+                      } ${isFuture || !isEditable ? 'opacity-40' : ''}`}
                     >
                       <div className={`text-[10px] font-medium mb-1 ${isToday ? 'text-violet-400' : 'text-slate-500'}`}>
                         {day.dayName.slice(0, 1)}
@@ -314,20 +347,29 @@ export function TrackerView({ onEditHabit }: TrackerViewProps) {
                       {habit.type === 'binary' ? (
                         <button
                           onClick={() => toggleBinary(habit.id, day.date)}
-                          disabled={isFuture}
-                          className={`w-7 h-7 rounded-md flex items-center justify-center transition-all ${buttonStyle}`}
+                          disabled={!isEditable}
+                          className={`w-7 h-7 rounded-md flex items-center justify-center transition-all ${buttonStyle} ${!isEditable && !isFuture ? 'cursor-not-allowed' : ''}`}
+                          title={!isEditable && !isFuture ? 'Locked (6hr grace period expired)' : ''}
                         >
-                          {value === 1 ? <Check className="w-3.5 h-3.5" /> : <Minus className="w-3 h-3" />}
+                          {!isEditable && !isFuture ? (
+                            <Lock className="w-3 h-3 text-slate-500" />
+                          ) : value === 1 ? (
+                            <Check className="w-3.5 h-3.5" />
+                          ) : (
+                            <Minus className="w-3 h-3" />
+                          )}
                         </button>
                       ) : (
                         <input
                           type="number"
                           min="0"
-                          value={value || ''}
-                          onChange={(e) => handleValueChange(habit.id, day.date, Number(e.target.value) || 0)}
-                          disabled={isFuture}
+                          value={getNumericDisplayValue(habit.id, day.date)}
+                          onChange={(e) => handleNumericInputChange(habit.id, day.date, e.target.value)}
+                          onBlur={() => handleNumericInputBlur(habit.id, day.date)}
+                          disabled={!isEditable}
                           placeholder="0"
-                          className={`w-9 h-7 ${inputStyle.bg} border ${inputStyle.border} rounded-md text-center text-xs focus:outline-none focus:border-violet-500 focus:ring-1 focus:ring-violet-500 ${inputStyle.text}`}
+                          title={!isEditable && !isFuture ? 'Locked (6hr grace period expired)' : ''}
+                          className={`w-9 h-7 ${inputStyle.bg} border ${inputStyle.border} rounded-md text-center text-xs focus:outline-none focus:border-violet-500 focus:ring-1 focus:ring-violet-500 ${inputStyle.text} ${!isEditable ? 'cursor-not-allowed' : ''}`}
                         />
                       )}
                     </div>
@@ -437,6 +479,7 @@ export function TrackerView({ onEditHabit }: TrackerViewProps) {
                   const value = getEntryValue(habit.id, day.date);
                   const isToday = day.date === today;
                   const isFuture = day.date > today;
+                  const isEditable = isDateEditable(day.date);
                   const inputStyle = getInputStyle(habit, value, day.date, status);
                   const buttonStyle = getBinaryButtonStyle(habit, value, day.date, status);
 
@@ -445,15 +488,18 @@ export function TrackerView({ onEditHabit }: TrackerViewProps) {
                       key={`${habit.id}-${day.date}`}
                       className={`bg-slate-800/50 p-1.5 lg:p-2 flex items-center justify-center ${
                         isToday ? 'bg-violet-900/20' : ''
-                      } ${isFuture ? 'opacity-50' : ''}`}
+                      } ${isFuture || !isEditable ? 'opacity-50' : ''}`}
                     >
                       {habit.type === 'binary' ? (
                         <button
                           onClick={() => toggleBinary(habit.id, day.date)}
-                          disabled={isFuture}
-                          className={`w-7 h-7 lg:w-8 lg:h-8 rounded-lg flex items-center justify-center transition-all ${buttonStyle} ${isFuture ? 'cursor-not-allowed' : 'cursor-pointer'}`}
+                          disabled={!isEditable}
+                          title={!isEditable && !isFuture ? 'Locked (6hr grace period expired)' : ''}
+                          className={`w-7 h-7 lg:w-8 lg:h-8 rounded-lg flex items-center justify-center transition-all ${buttonStyle} ${!isEditable ? 'cursor-not-allowed' : 'cursor-pointer'}`}
                         >
-                          {value === 1 ? (
+                          {!isEditable && !isFuture ? (
+                            <Lock className="w-3.5 h-3.5 lg:w-4 lg:h-4 text-slate-500" />
+                          ) : value === 1 ? (
                             <Check className="w-3.5 h-3.5 lg:w-4 lg:h-4" />
                           ) : (
                             <Minus className="w-3.5 h-3.5 lg:w-4 lg:h-4" />
@@ -463,13 +509,13 @@ export function TrackerView({ onEditHabit }: TrackerViewProps) {
                         <input
                           type="number"
                           min="0"
-                          value={value || ''}
-                          onChange={(e) =>
-                            handleValueChange(habit.id, day.date, Number(e.target.value) || 0)
-                          }
-                          disabled={isFuture}
+                          value={getNumericDisplayValue(habit.id, day.date)}
+                          onChange={(e) => handleNumericInputChange(habit.id, day.date, e.target.value)}
+                          onBlur={() => handleNumericInputBlur(habit.id, day.date)}
+                          disabled={!isEditable}
                           placeholder="0"
-                          className={`w-11 lg:w-14 h-7 lg:h-8 ${inputStyle.bg} border ${inputStyle.border} rounded-lg text-center text-xs lg:text-sm focus:outline-none focus:border-violet-500 focus:ring-1 focus:ring-violet-500 ${inputStyle.text} ${isFuture ? 'cursor-not-allowed' : ''}`}
+                          title={!isEditable && !isFuture ? 'Locked (6hr grace period expired)' : ''}
+                          className={`w-11 lg:w-14 h-7 lg:h-8 ${inputStyle.bg} border ${inputStyle.border} rounded-lg text-center text-xs lg:text-sm focus:outline-none focus:border-violet-500 focus:ring-1 focus:ring-violet-500 ${inputStyle.text} ${!isEditable ? 'cursor-not-allowed' : ''}`}
                         />
                       )}
                     </div>

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Smile, Trash2 } from 'lucide-react';
+import { X, Smile, Trash2, Hash, CheckSquare } from 'lucide-react';
 import { useHabits } from '../context/HabitContext';
 import { HABIT_COLORS, HABIT_ICONS } from '../lib/utils';
 import type { Habit, HabitType, HabitFormData } from '../types';
@@ -116,7 +116,9 @@ export function HabitForm({ habit, onClose }: HabitFormProps) {
                     : 'border-slate-600 hover:border-slate-500'
                 }`}
               >
-                <div className="text-2xl mb-1">✓</div>
+                <div className="flex justify-center mb-1">
+                  <CheckSquare className="w-6 h-6 text-emerald-400" />
+                </div>
                 <div className="font-medium text-sm">Checkbox</div>
                 <div className="text-xs text-slate-400">Did it or not</div>
               </button>
@@ -129,7 +131,9 @@ export function HabitForm({ habit, onClose }: HabitFormProps) {
                     : 'border-slate-600 hover:border-slate-500'
                 }`}
               >
-                <div className="text-2xl mb-1">🔢</div>
+                <div className="flex justify-center mb-1">
+                  <Hash className="w-6 h-6 text-cyan-400" />
+                </div>
                 <div className="font-medium text-sm">Numeric</div>
                 <div className="text-xs text-slate-400">Track amounts</div>
               </button>
@@ -156,6 +160,13 @@ export function HabitForm({ habit, onClose }: HabitFormProps) {
                 className="w-full px-3 py-2.5 bg-slate-800 border border-slate-600 rounded-xl focus:outline-none focus:border-violet-500 focus:ring-1 focus:ring-violet-500 transition-colors"
                 required
               />
+              {/* Per-day calculation for numeric habits */}
+              {formData.type === 'numeric' && formData.weeklyGoal > 0 && (
+                <div className="mt-1.5 text-xs text-cyan-400 flex items-center gap-1">
+                  <span>≈ {Math.round((formData.weeklyGoal / 7) * 100) / 100}</span>
+                  <span className="text-slate-500">{formData.unit}/day</span>
+                </div>
+              )}
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-300 mb-1.5">

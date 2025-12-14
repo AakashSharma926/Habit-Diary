@@ -19,14 +19,14 @@ import {
   formatDate, 
   calculateOverallStreak,
   calculateHabitStreak,
-  getStreakEmoji
+  getStreakEmoji,
+  isEntryComplete
 } from '../lib/utils';
 import {
   format,
   subDays,
   subWeeks,
   subMonths,
-  subYears,
   startOfWeek,
   endOfWeek,
   startOfMonth,
@@ -71,16 +71,24 @@ interface ReportData {
   maxStreak: number;
 }
 
+// Minimum date: January 1, 2025
+const MIN_DATE = new Date(2025, 0, 1);
+
+// Clamp date to not go before MIN_DATE
+const clampDate = (date: Date): Date => {
+  return isBefore(date, MIN_DATE) ? MIN_DATE : date;
+};
+
 const PRESET_RANGES = [
-  { label: 'Last 7 Days', getValue: () => ({ from: subDays(new Date(), 6), to: new Date() }) },
-  { label: 'This Week', getValue: () => ({ from: startOfWeek(new Date(), { weekStartsOn: 1 }), to: endOfWeek(new Date(), { weekStartsOn: 1 }) }) },
-  { label: 'Last Week', getValue: () => ({ from: startOfWeek(subWeeks(new Date(), 1), { weekStartsOn: 1 }), to: endOfWeek(subWeeks(new Date(), 1), { weekStartsOn: 1 }) }) },
-  { label: 'Last 30 Days', getValue: () => ({ from: subDays(new Date(), 29), to: new Date() }) },
-  { label: 'This Month', getValue: () => ({ from: startOfMonth(new Date()), to: endOfMonth(new Date()) }) },
-  { label: 'Last Month', getValue: () => ({ from: startOfMonth(subMonths(new Date(), 1)), to: endOfMonth(subMonths(new Date(), 1)) }) },
-  { label: 'Last 3 Months', getValue: () => ({ from: subMonths(new Date(), 3), to: new Date() }) },
-  { label: 'Last 6 Months', getValue: () => ({ from: subMonths(new Date(), 6), to: new Date() }) },
-  { label: 'Last Year', getValue: () => ({ from: subYears(new Date(), 1), to: new Date() }) },
+  { label: 'Last 7 Days', getValue: () => ({ from: clampDate(subDays(new Date(), 6)), to: new Date() }) },
+  { label: 'This Week', getValue: () => ({ from: clampDate(startOfWeek(new Date(), { weekStartsOn: 1 })), to: endOfWeek(new Date(), { weekStartsOn: 1 }) }) },
+  { label: 'Last Week', getValue: () => ({ from: clampDate(startOfWeek(subWeeks(new Date(), 1), { weekStartsOn: 1 })), to: endOfWeek(subWeeks(new Date(), 1), { weekStartsOn: 1 }) }) },
+  { label: 'Last 30 Days', getValue: () => ({ from: clampDate(subDays(new Date(), 29)), to: new Date() }) },
+  { label: 'This Month', getValue: () => ({ from: clampDate(startOfMonth(new Date())), to: endOfMonth(new Date()) }) },
+  { label: 'Last Month', getValue: () => ({ from: clampDate(startOfMonth(subMonths(new Date(), 1))), to: endOfMonth(subMonths(new Date(), 1)) }) },
+  { label: 'Last 3 Months', getValue: () => ({ from: clampDate(subMonths(new Date(), 3)), to: new Date() }) },
+  { label: 'Last 6 Months', getValue: () => ({ from: clampDate(subMonths(new Date(), 6)), to: new Date() }) },
+  { label: 'Since 2025', getValue: () => ({ from: MIN_DATE, to: new Date() }) },
 ];
 
 export function ReportsView() {
@@ -104,21 +112,17 @@ export function ReportsView() {
     // Filter entries in period
     const periodEntries = allEntries.filter(e => e.date >= startStr && e.date <= endStr);
 
-    // Calculate per-habit stats
+    // Calculate per-habit stats using targetAtEntry for historical accuracy
     const habitStats = habits.map(habit => {
       const habitEntries = periodEntries.filter(e => e.habitId === habit.id);
-      const dailyGoal = habit.weeklyGoal / 7;
       
       let completions = 0;
       for (const day of days) {
         const dayStr = formatDate(day);
         const entry = habitEntries.find(e => e.date === dayStr);
-        const value = entry?.value || 0;
         
-        if (habit.type === 'binary') {
-          if (value >= 1) completions++;
-        } else {
-          if (value >= dailyGoal * 0.8) completions++;
+        if (entry && isEntryComplete(entry, habit)) {
+          completions++;
         }
       }
 
@@ -141,7 +145,7 @@ export function ReportsView() {
       };
     });
 
-    // Calculate overall stats
+    // Calculate overall stats - perfect days using targetAtEntry
     let perfectDays = 0;
     for (const day of days) {
       const dayStr = formatDate(day);
@@ -149,16 +153,11 @@ export function ReportsView() {
       
       for (const habit of habits) {
         const entry = periodEntries.find(e => e.habitId === habit.id && e.date === dayStr);
-        const value = entry?.value || 0;
-        const dailyGoal = habit.weeklyGoal / 7;
         
-        if (habit.type === 'binary') {
-          if (value < 1) allHabitsComplete = false;
-        } else {
-          if (value < dailyGoal * 0.8) allHabitsComplete = false;
+        if (!entry || !isEntryComplete(entry, habit)) {
+          allHabitsComplete = false;
+          break;
         }
-        
-        if (!allHabitsComplete) break;
       }
       
       if (allHabitsComplete && habits.length > 0) perfectDays++;
@@ -556,8 +555,14 @@ function ReportsDateRangePicker({
             {/* Month Navigation */}
             <div className="flex items-center justify-between mb-4">
               <button
-                onClick={() => setCurrentMonth(subMonths(currentMonth, 1))}
-                className="p-2 hover:bg-slate-700 rounded-lg transition-colors"
+                onClick={() => {
+                  const prevMonth = subMonths(currentMonth, 1);
+                  if (!isBefore(endOfMonth(prevMonth), MIN_DATE)) {
+                    setCurrentMonth(prevMonth);
+                  }
+                }}
+                disabled={isBefore(endOfMonth(subMonths(currentMonth, 1)), MIN_DATE)}
+                className="p-2 hover:bg-slate-700 rounded-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
               >
                 <ChevronLeft className="w-4 h-4" />
               </button>
@@ -593,17 +598,19 @@ function ReportsDateRangePicker({
                 const isToday = isSameDay(day, new Date());
                 const isStart = isSameDay(day, tempRange.from);
                 const isEnd = isSameDay(day, tempRange.to);
+                const isBeforeMin = isBefore(day, MIN_DATE);
 
                 return (
                   <button
                     key={idx}
-                    onClick={() => handleDayClick(day)}
+                    onClick={() => !isBeforeMin && handleDayClick(day)}
+                    disabled={isBeforeMin}
                     className={`
                       relative h-8 sm:h-9 text-xs sm:text-sm rounded-md sm:rounded-lg transition-all
-                      ${!isCurrentMonth ? 'text-slate-600' : 'text-slate-300'}
+                      ${isBeforeMin ? 'text-slate-700 cursor-not-allowed' : !isCurrentMonth ? 'text-slate-600' : 'text-slate-300'}
                       ${isToday && !isSelected ? 'ring-1 ring-violet-500' : ''}
-                      ${inRange && !isSelected ? 'bg-violet-600/20' : ''}
-                      ${isSelected ? 'bg-violet-600 text-white font-medium' : 'hover:bg-slate-700'}
+                      ${inRange && !isSelected && !isBeforeMin ? 'bg-violet-600/20' : ''}
+                      ${isSelected && !isBeforeMin ? 'bg-violet-600 text-white font-medium' : !isBeforeMin ? 'hover:bg-slate-700' : ''}
                       ${isStart && !isSameDay(tempRange.from, tempRange.to) ? 'rounded-r-none' : ''}
                       ${isEnd && !isSameDay(tempRange.from, tempRange.to) ? 'rounded-l-none' : ''}
                       ${inRange && !isStart && !isEnd ? 'rounded-none' : ''}

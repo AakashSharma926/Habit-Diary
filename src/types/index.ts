@@ -20,6 +20,7 @@ export interface DailyEntry {
   habitId: string;
   date: string; // ISO format: "2024-12-08"
   value: number; // 0/1 for binary, actual value for numeric
+  targetAtEntry?: number; // Daily goal snapshot at time of entry (for historical accuracy)
   createdAt: string;
   updatedAt: string;
 }
@@ -92,5 +93,6 @@ export interface ExportData {
   habits: Habit[];
   entries: DailyEntry[];
 }
+
 
 
