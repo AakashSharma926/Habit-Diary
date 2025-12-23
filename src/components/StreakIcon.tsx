@@ -7,7 +7,7 @@ import {
   Zap,
   Leaf,
   Moon,
-  Trophy
+  Award
 } from 'lucide-react';
 
 interface StreakIconProps {
@@ -48,9 +48,9 @@ export function StreakIcon({ streak, className = '', size = 'md' }: StreakIconPr
     return <Flame className={`${baseClass} text-orange-400 fill-orange-500 drop-shadow-[0_0_5px_rgba(251,146,60,0.6)]`} />;
   }
   
-  // 14+ days - Gold (Trophy)
+  // 14+ days - Gold (Award/Medal)
   if (streak >= 14) {
-    return <Trophy className={`${baseClass} text-amber-400 drop-shadow-[0_0_4px_rgba(251,191,36,0.5)]`} />;
+    return <Award className={`${baseClass} text-amber-400 fill-amber-400/20 drop-shadow-[0_0_4px_rgba(251,191,36,0.5)]`} />;
   }
   
   // 7+ days - Silver (Zap/Lightning)
