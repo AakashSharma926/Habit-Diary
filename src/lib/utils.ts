@@ -17,14 +17,13 @@ import type { Habit, DailyEntry, WeeklyStats, OverallStats, StreakData } from '.
 // ============ DATE UTILITIES ============
 
 /**
- * Check if a date is editable based on the 6-hour grace period rule:
+ * Check if a date is editable:
  * - Today is always editable
- * - Yesterday is editable until 6 AM today
+ * - Yesterday is always editable (full day)
  * - Future dates are not editable
  * - All other past dates are locked
  */
 export function isDateEditable(dateStr: string): boolean {
-  const now = new Date();
   const today = formatDate(new Date());
   const targetDate = parseISO(dateStr);
   const targetDateStr = formatDate(targetDate);
@@ -39,11 +38,10 @@ export function isDateEditable(dateStr: string): boolean {
     return true;
   }
   
-  // Yesterday check: editable if current time is before 6 AM
+  // Yesterday is always editable
   const yesterday = formatDate(subDays(new Date(), 1));
   if (targetDateStr === yesterday) {
-    const currentHour = now.getHours();
-    return currentHour < 6; // Editable from 12 AM to 6 AM
+    return true;
   }
   
   // All other past dates are locked
