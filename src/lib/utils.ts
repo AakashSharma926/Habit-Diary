@@ -162,6 +162,18 @@ export function calculateWeeklyStats(
   const weekEnd = getWeekEnd(weekStart);
   const weekDates = getWeekDates(weekStart);
   
+  // Get habit creation date
+  const habitCreatedAt = parseISO(habit.createdAt);
+  const createdDay = new Date(habitCreatedAt);
+  createdDay.setHours(0, 0, 0, 0);
+  
+  // Only count days from when the habit was created
+  const activeDays = weekDates.filter(day => {
+    const dayStart = new Date(day);
+    dayStart.setHours(0, 0, 0, 0);
+    return dayStart >= createdDay;
+  });
+  
   // Get entries for this habit in this week
   const habitEntries = entries.filter(
     (e) => e.habitId === habit.id && 
@@ -171,28 +183,30 @@ export function calculateWeeklyStats(
   
   // Calculate total
   const total = habitEntries.reduce((sum, entry) => sum + entry.value, 0);
-  const goal = habit.weeklyGoal;
+  
+  // Pro-rate the goal based on active days (if habit was created mid-week)
+  const activeDaysCount = activeDays.length;
+  const goal = activeDaysCount > 0 ? (habit.weeklyGoal / 7) * activeDaysCount : habit.weeklyGoal;
   const remaining = Math.max(0, goal - total);
   
-  // Calculate average needed per remaining day
-  const remainingDays = getRemainingDaysInWeek(weekStart);
-  const avgNeededPerDay = remainingDays > 0 ? remaining / remainingDays : 0;
-  
-  // Determine if on track
-  // Calculate expected progress for this point in the week
+  // Calculate average needed per remaining day (only count active remaining days)
   const today = new Date();
-  const daysPassed = weekDates.filter((d) => isBefore(d, today) || isToday(d)).length;
-  const expectedProgress = (goal / 7) * daysPassed;
+  const remainingActiveDays = activeDays.filter(d => !isBefore(d, today) || isToday(d)).length;
+  const avgNeededPerDay = remainingActiveDays > 0 ? remaining / remainingActiveDays : 0;
+  
+  // Determine if on track (based on active days passed)
+  const activePassedDays = activeDays.filter((d) => isBefore(d, today) || isToday(d)).length;
+  const expectedProgress = activePassedDays > 0 ? (goal / activeDaysCount) * activePassedDays : 0;
   const isOnTrack = total >= expectedProgress || total >= goal;
   
-  const completionPercentage = Math.min(100, Math.round((total / goal) * 100));
+  const completionPercentage = goal > 0 ? Math.min(100, Math.round((total / goal) * 100)) : 0;
   
   return {
     weekStart: weekStartStr,
     habitId: habit.id,
     total,
-    goal,
-    remaining,
+    goal: Math.round(goal * 100) / 100,
+    remaining: Math.round(remaining * 100) / 100,
     avgNeededPerDay: Math.round(avgNeededPerDay * 100) / 100,
     isOnTrack,
     completionPercentage,
@@ -210,23 +224,40 @@ export function calculateOverallStats(
   
   const stats = habits.map((h) => calculateWeeklyStats(h, entries, weekStart));
   
-  const habitsOnTrack = stats.filter((s) => s.isOnTrack).length;
-  const totalCompletion = stats.reduce((sum, s) => sum + s.completionPercentage, 0);
-  const overallCompletionPercentage = habits.length > 0 
-    ? Math.round(totalCompletion / habits.length) 
+  // Filter out habits with 0 goal (didn't exist in this week at all)
+  const applicableStats = stats.filter(s => s.goal > 0);
+  
+  const habitsOnTrack = applicableStats.filter((s) => s.isOnTrack).length;
+  const totalCompletion = applicableStats.reduce((sum, s) => sum + s.completionPercentage, 0);
+  const overallCompletionPercentage = applicableStats.length > 0 
+    ? Math.round(totalCompletion / applicableStats.length) 
     : 0;
   
-  // Best and worst performing habits
-  const sortedStats = [...stats].sort((a, b) => b.completionPercentage - a.completionPercentage);
+  // Best and worst performing habits (from applicable ones)
+  const sortedStats = [...applicableStats].sort((a, b) => b.completionPercentage - a.completionPercentage);
   const bestPerformingHabit = sortedStats[0]?.habitId || null;
   const needsAttentionHabit = sortedStats.filter((s) => !s.isOnTrack)[0]?.habitId || null;
   
-  // Count perfect days (all habits hit their daily target)
+  // Count perfect days (all habits that existed on that day hit their daily target)
   const weeklyPerfectDays = weekDates.filter((date) => {
     const dateStr = formatDate(date);
+    const dayStart = new Date(date);
+    dayStart.setHours(0, 0, 0, 0);
+    
     if (isBefore(new Date(), date) && !isToday(date)) return false;
     
-    return habits.every((habit) => {
+    // Get habits that existed on this day
+    const habitsExistingOnDay = habits.filter(habit => {
+      const createdAt = parseISO(habit.createdAt);
+      const createdDay = new Date(createdAt);
+      createdDay.setHours(0, 0, 0, 0);
+      return dayStart >= createdDay;
+    });
+    
+    // If no habits existed on this day, it's not a perfect day
+    if (habitsExistingOnDay.length === 0) return false;
+    
+    return habitsExistingOnDay.every((habit) => {
       const entry = entries.find((e) => e.habitId === habit.id && e.date === dateStr);
       if (!entry) return false;
       return isEntryComplete(entry, habit);
@@ -539,13 +570,28 @@ export function calculateOverallStreak(
     }
   }
   
-  // Check if a day is "perfect" (all habits met their daily goal)
+  // Check if a day is "perfect" (all habits that existed on that day met their daily goal)
   // Uses targetAtEntry for historical accuracy
+  // Only considers habits that existed on the given date
   const isPerfectDay = (dateStr: string): boolean => {
     const dayEntries = entriesByDateAndHabit.get(dateStr);
     if (!dayEntries) return false;
     
-    for (const habit of habits) {
+    const dayDate = parseISO(dateStr);
+    dayDate.setHours(0, 0, 0, 0);
+    
+    // Get habits that existed on this day
+    const habitsExistingOnDay = habits.filter(habit => {
+      const createdAt = parseISO(habit.createdAt);
+      const createdDay = new Date(createdAt);
+      createdDay.setHours(0, 0, 0, 0);
+      return dayDate >= createdDay;
+    });
+    
+    // If no habits existed on this day, it's not a perfect day
+    if (habitsExistingOnDay.length === 0) return false;
+    
+    for (const habit of habitsExistingOnDay) {
       const entry = dayEntries.get(habit.id);
       if (!entry) return false;
       if (!isEntryComplete(entry, habit)) return false;

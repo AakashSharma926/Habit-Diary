@@ -96,6 +96,7 @@ export function MainDashboard() {
   const rangeStats = useMemo(() => {
     const daysInRange = differenceInDays(dateRange.to, dateRange.from) + 1;
     const weeksInRange = Math.ceil(daysInRange / 7);
+    const daysInInterval = eachDayOfInterval({ start: dateRange.from, end: dateRange.to });
     
     // Get entries within the date range
     const rangeEntries = allEntries.filter(entry => {
@@ -103,14 +104,42 @@ export function MainDashboard() {
       return isWithinInterval(entryDate, { start: dateRange.from, end: dateRange.to });
     });
 
-    // Calculate per-habit stats
+    // Calculate per-habit stats - ONLY count days from when habit was created
     const habitStats = filteredHabits.map(habit => {
+      const habitCreatedAt = parseISO(habit.createdAt);
+      
+      // Calculate active days for this habit within the range
+      // Only count days from the habit's creation date onwards
+      const activeDays = daysInInterval.filter(day => {
+        const dayStart = new Date(day);
+        dayStart.setHours(0, 0, 0, 0);
+        const createdDay = new Date(habitCreatedAt);
+        createdDay.setHours(0, 0, 0, 0);
+        return dayStart >= createdDay;
+      });
+      
+      const activeDaysCount = activeDays.length;
+      
+      // If habit didn't exist in this range, skip it
+      if (activeDaysCount === 0) {
+        return {
+          habit,
+          totalValue: 0,
+          expectedTotal: 0,
+          completionPercentage: 0,
+          isOnTrack: true, // Not applicable
+          dailyAverage: 0,
+          activeDays: 0,
+          notApplicable: true, // Flag to exclude from overall calculations
+        };
+      }
+      
       const habitEntries = rangeEntries.filter(e => e.habitId === habit.id);
       const totalValue = habitEntries.reduce((sum, e) => sum + e.value, 0);
       
-      // Expected value based on range
+      // Expected value based on ACTIVE days only (not full range)
       const dailyGoal = habit.weeklyGoal / 7;
-      const expectedTotal = dailyGoal * daysInRange;
+      const expectedTotal = dailyGoal * activeDaysCount;
       const completionPercentage = expectedTotal > 0 ? Math.min(100, Math.round((totalValue / expectedTotal) * 100)) : 0;
       
       // Is on track?
@@ -122,35 +151,53 @@ export function MainDashboard() {
         expectedTotal,
         completionPercentage,
         isOnTrack,
-        dailyAverage: daysInRange > 0 ? Math.round((totalValue / daysInRange) * 10) / 10 : 0,
+        dailyAverage: activeDaysCount > 0 ? Math.round((totalValue / activeDaysCount) * 10) / 10 : 0,
+        activeDays: activeDaysCount,
+        notApplicable: false,
       };
     });
 
-    // Overall completion
-    const overallCompletion = habitStats.length > 0
-      ? Math.round(habitStats.reduce((sum, h) => sum + h.completionPercentage, 0) / habitStats.length)
+    // Filter out habits that didn't exist in this range for overall calculations
+    const applicableStats = habitStats.filter(h => !h.notApplicable);
+    
+    // Overall completion - only from applicable habits
+    const overallCompletion = applicableStats.length > 0
+      ? Math.round(applicableStats.reduce((sum, h) => sum + h.completionPercentage, 0) / applicableStats.length)
       : 0;
 
-    // Habits on track
-    const habitsOnTrack = habitStats.filter(h => h.isOnTrack).length;
+    // Habits on track - only from applicable habits
+    const habitsOnTrack = applicableStats.filter(h => h.isOnTrack).length;
 
     // Days with all habits completed (perfect days)
-    // Uses targetAtEntry for historical accuracy when available
-    const daysInInterval = eachDayOfInterval({ start: dateRange.from, end: dateRange.to });
+    // Only consider habits that existed on each specific day
     let perfectDays = 0;
     
     daysInInterval.forEach(day => {
       const dayStr = formatDate(day);
+      const dayStart = new Date(day);
+      dayStart.setHours(0, 0, 0, 0);
+      
+      // Get habits that existed on this day
+      const habitsExistingOnDay = filteredHabits.filter(habit => {
+        const createdAt = parseISO(habit.createdAt);
+        const createdDay = new Date(createdAt);
+        createdDay.setHours(0, 0, 0, 0);
+        return dayStart >= createdDay;
+      });
+      
+      // If no habits existed on this day, skip
+      if (habitsExistingOnDay.length === 0) return;
+      
       let allHabitsHit = true;
       
-      filteredHabits.forEach(habit => {
+      habitsExistingOnDay.forEach(habit => {
         const entry = rangeEntries.find(e => e.habitId === habit.id && e.date === dayStr);
         if (!entry || !isEntryComplete(entry, habit)) {
           allHabitsHit = false;
         }
       });
       
-      if (allHabitsHit && filteredHabits.length > 0) perfectDays++;
+      if (allHabitsHit) perfectDays++;
     });
 
     return {
@@ -166,14 +213,25 @@ export function MainDashboard() {
 
   // Trend data - daily breakdown within the range
   // Uses targetAtEntry for historical accuracy
+  // Only considers habits that existed on each day
   const trendData = useMemo(() => {
     const days = eachDayOfInterval({ start: dateRange.from, end: dateRange.to });
 
     return days.map(day => {
       const dayStr = formatDate(day);
+      const dayStart = new Date(day);
+      dayStart.setHours(0, 0, 0, 0);
+      
+      // Only consider habits that existed on this day
+      const habitsExistingOnDay = filteredHabits.filter(habit => {
+        const createdAt = parseISO(habit.createdAt);
+        const createdDay = new Date(createdAt);
+        createdDay.setHours(0, 0, 0, 0);
+        return dayStart >= createdDay;
+      });
       
       // Calculate completion for this day using entry's stored target
-      const dayStats = filteredHabits.map(habit => {
+      const dayStats = habitsExistingOnDay.map(habit => {
         const entry = allEntries.find(e => e.habitId === habit.id && e.date === dayStr);
         if (!entry) return 0;
         
@@ -627,8 +685,18 @@ function YearlyActivityChart({ habits, allEntries }: { habits: any[]; allEntries
       const dateStr = formatDate(day);
       const dayEntries = entriesByDateAndHabit.get(dateStr);
       const isFuture = isAfter(day, today);
+      const dayStart = new Date(day);
+      dayStart.setHours(0, 0, 0, 0);
       
-      if (!dayEntries || habits.length === 0 || isFuture) {
+      // Only consider habits that existed on this day
+      const habitsExistingOnDay = habits.filter(habit => {
+        const createdAt = parseISO(habit.createdAt);
+        const createdDay = new Date(createdAt);
+        createdDay.setHours(0, 0, 0, 0);
+        return dayStart >= createdDay;
+      });
+      
+      if (!dayEntries || habitsExistingOnDay.length === 0 || isFuture) {
         return {
           date: day,
           dateStr,
@@ -637,12 +705,14 @@ function YearlyActivityChart({ habits, allEntries }: { habits: any[]; allEntries
         };
       }
       
-      // Calculate average completion across all habits using targetAtEntry
+      // Calculate average completion across habits that existed on this day
       let totalCompletion = 0;
-      for (const habit of habits) {
+      let habitsWithData = 0;
+      for (const habit of habitsExistingOnDay) {
         const entry = dayEntries.get(habit.id);
         if (!entry) {
-          // No entry for this habit on this day
+          // No entry for this habit on this day - counts as 0 completion
+          habitsWithData++;
           continue;
         }
         const value = entry.value || 0;
@@ -650,8 +720,9 @@ function YearlyActivityChart({ habits, allEntries }: { habits: any[]; allEntries
         const goal = getEffectiveDailyGoal(entry, habit);
         const completion = goal > 0 ? Math.min(value / goal, 1) : 0;
         totalCompletion += completion;
+        habitsWithData++;
       }
-      const avgCompletion = habits.length > 0 ? totalCompletion / habits.length : 0;
+      const avgCompletion = habitsWithData > 0 ? totalCompletion / habitsWithData : 0;
       
       // Convert to level (0-4)
       let level = 0;

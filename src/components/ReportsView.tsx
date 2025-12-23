@@ -28,6 +28,7 @@ import {
   subWeeks,
   subMonths,
   startOfWeek,
+  parseISO,
   endOfWeek,
   startOfMonth,
   endOfMonth,
@@ -113,11 +114,22 @@ export function ReportsView() {
     const periodEntries = allEntries.filter(e => e.date >= startStr && e.date <= endStr);
 
     // Calculate per-habit stats using targetAtEntry for historical accuracy
+    // Only count days from when each habit was created
     const habitStats = habits.map(habit => {
+      const habitCreatedAt = parseISO(habit.createdAt);
       const habitEntries = periodEntries.filter(e => e.habitId === habit.id);
       
+      // Only count days from when the habit was created
+      const activeDays = days.filter(day => {
+        const dayStart = new Date(day);
+        dayStart.setHours(0, 0, 0, 0);
+        const createdDay = new Date(habitCreatedAt);
+        createdDay.setHours(0, 0, 0, 0);
+        return dayStart >= createdDay;
+      });
+      
       let completions = 0;
-      for (const day of days) {
+      for (const day of activeDays) {
         const dayStr = formatDate(day);
         const entry = habitEntries.find(e => e.date === dayStr);
         
@@ -126,7 +138,7 @@ export function ReportsView() {
         }
       }
 
-      const expected = totalDays;
+      const expected = activeDays.length;
       const completionRate = expected > 0 ? (completions / expected) * 100 : 0;
       
       // Get streak data
@@ -141,17 +153,36 @@ export function ReportsView() {
         expected,
         completionRate,
         currentStreak: streakData.currentStreak,
-        maxStreak: streakData.maxStreak
+        maxStreak: streakData.maxStreak,
+        notApplicable: expected === 0 // Flag if habit didn't exist in this period
       };
     });
 
+    // Filter out habits that didn't exist in this period for overall calculations
+    const applicableStats = habitStats.filter(h => !h.notApplicable);
+
     // Calculate overall stats - perfect days using targetAtEntry
+    // Only consider habits that existed on each specific day
     let perfectDays = 0;
     for (const day of days) {
       const dayStr = formatDate(day);
+      const dayStart = new Date(day);
+      dayStart.setHours(0, 0, 0, 0);
+      
+      // Get habits that existed on this day
+      const habitsExistingOnDay = habits.filter(habit => {
+        const createdAt = parseISO(habit.createdAt);
+        const createdDay = new Date(createdAt);
+        createdDay.setHours(0, 0, 0, 0);
+        return dayStart >= createdDay;
+      });
+      
+      // If no habits existed on this day, skip
+      if (habitsExistingOnDay.length === 0) continue;
+      
       let allHabitsComplete = true;
       
-      for (const habit of habits) {
+      for (const habit of habitsExistingOnDay) {
         const entry = periodEntries.find(e => e.habitId === habit.id && e.date === dayStr);
         
         if (!entry || !isEntryComplete(entry, habit)) {
@@ -160,11 +191,11 @@ export function ReportsView() {
         }
       }
       
-      if (allHabitsComplete && habits.length > 0) perfectDays++;
+      if (allHabitsComplete) perfectDays++;
     }
 
-    const totalCompletions = habitStats.reduce((sum, h) => sum + h.completions, 0);
-    const expectedCompletions = habitStats.reduce((sum, h) => sum + h.expected, 0);
+    const totalCompletions = applicableStats.reduce((sum, h) => sum + h.completions, 0);
+    const expectedCompletions = applicableStats.reduce((sum, h) => sum + h.expected, 0);
     const overallCompletionRate = expectedCompletions > 0 
       ? (totalCompletions / expectedCompletions) * 100 
       : 0;
