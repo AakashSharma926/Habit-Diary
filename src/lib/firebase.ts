@@ -263,12 +263,6 @@ export function subscribeToFriendEntries(friendUserId: string, callback: (entrie
 
 // ============ USER PROFILE ============
 
-// Sparks are earned 1 per completed day per habit
-export interface SparksClaimed {
-  // Set of "habitId_date" strings that have already awarded sparks
-  claimedDays: string[];
-}
-
 export interface UserProfile {
   uid: string;
   email: string | null;
@@ -276,8 +270,6 @@ export interface UserProfile {
   photoURL: string | null;
   createdAt: Timestamp | Date;
   friends: string[];
-  sparks: number; // Total sparks earned (1 per completed day per habit)
-  claimedDays: string[]; // Array of "habitId_date" strings that have awarded sparks
 }
 
 export async function getUserProfile(userId: string): Promise<UserProfile | null> {
@@ -322,54 +314,6 @@ export async function getFriendProfiles(friendIds: string[]): Promise<UserProfil
     if (profile) profiles.push(profile);
   }
   return profiles;
-}
-
-// ============ SPARKS SYSTEM ============
-// 1 Spark per completed day per habit
-
-/**
- * Check if sparks have been claimed for a specific habit+date
- */
-export function isDayClaimed(claimedDays: string[], habitId: string, date: string): boolean {
-  return claimedDays.includes(`${habitId}_${date}`);
-}
-
-/**
- * Claim sparks for completed days
- * Returns total new sparks earned
- */
-export async function claimSparksForCompletedDays(
-  userId: string,
-  completedDays: { habitId: string; date: string }[]
-): Promise<{ totalSparksEarned: number; claimedCount: number }> {
-  if (!db) return { totalSparksEarned: 0, claimedCount: 0 };
-  
-  const profile = await getUserProfile(userId);
-  if (!profile) return { totalSparksEarned: 0, claimedCount: 0 };
-  
-  const claimedDays = profile.claimedDays || [];
-  const newClaims: string[] = [];
-  
-  for (const { habitId, date } of completedDays) {
-    const key = `${habitId}_${date}`;
-    if (!claimedDays.includes(key) && !newClaims.includes(key)) {
-      newClaims.push(key);
-    }
-  }
-  
-  if (newClaims.length > 0) {
-    const updatedClaimedDays = [...claimedDays, ...newClaims];
-    const newSparks = (profile.sparks || 0) + newClaims.length;
-    
-    await updateUserProfile(userId, {
-      sparks: newSparks,
-      claimedDays: updatedClaimedDays,
-    } as Partial<UserProfile>);
-    
-    return { totalSparksEarned: newClaims.length, claimedCount: newClaims.length };
-  }
-  
-  return { totalSparksEarned: 0, claimedCount: 0 };
 }
 
 export default app;

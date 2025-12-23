@@ -11,7 +11,6 @@ import {
   db, 
   googleProvider, 
   isFirebaseConfigured,
-  claimSparksForCompletedDays,
 } from '../lib/firebase';
 
 export interface UserProfile {
@@ -20,8 +19,6 @@ export interface UserProfile {
   displayName: string | null;
   photoURL: string | null;
   createdAt: Date;
-  sparks: number;
-  claimedDays: string[]; // Array of "habitId_date" that have awarded sparks
 }
 
 interface AuthContextType {
@@ -35,7 +32,6 @@ interface AuthContextType {
   logout: () => Promise<void>;
   refreshUsers: () => Promise<void>;
   refreshProfile: () => Promise<void>;
-  claimSparks: (completedDays: { habitId: string; date: string }[]) => Promise<{ totalSparksEarned: number; claimedCount: number }>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -99,8 +95,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
         displayName: data.displayName,
         photoURL: data.photoURL,
         createdAt: data.createdAt?.toDate() || new Date(),
-        sparks: data.sparks || 0,
-        claimedDays: data.claimedDays || [],
       };
     } else {
       const newProfile = {
@@ -109,8 +103,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
         displayName: firebaseUser.displayName,
         photoURL: firebaseUser.photoURL,
         createdAt: serverTimestamp(),
-        sparks: 0,
-        claimedDays: [],
       };
 
       await setDoc(userRef, newProfile);
@@ -128,22 +120,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
     const profile = await getOrCreateUserProfile(user);
     setUserProfile(profile);
   }, [user]);
-
-  // Claim sparks for completed days (1 spark per completed day per habit)
-  const claimSparks = useCallback(async (
-    completedDays: { habitId: string; date: string }[]
-  ): Promise<{ totalSparksEarned: number; claimedCount: number }> => {
-    if (!user) return { totalSparksEarned: 0, claimedCount: 0 };
-    
-    const result = await claimSparksForCompletedDays(user.uid, completedDays);
-    
-    // Refresh profile to get updated sparks count
-    if (result.claimedCount > 0) {
-      await refreshProfile();
-    }
-    
-    return result;
-  }, [user, refreshProfile]);
 
   // Load all users from Firestore
   const loadAllUsers = async () => {
@@ -163,8 +139,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
           displayName: data.displayName,
           photoURL: data.photoURL,
           createdAt: data.createdAt?.toDate() || new Date(),
-          sparks: data.sparks || 0,
-          claimedDays: data.claimedDays || [],
         };
       });
       setAllUsers(users);
@@ -201,7 +175,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
     logout,
     refreshUsers,
     refreshProfile,
-    claimSparks,
   };
 
   return (

@@ -11,7 +11,6 @@ import { useHabits } from '../context/HabitContext';
 import { useAuth } from '../context/AuthContext';
 import { exportToJSON, exportToCSV, downloadFile, calculateOverallStreak, getStreakLevel } from '../lib/utils';
 import { StreakIcon } from './StreakIcon';
-import { SparksDisplay } from './SparksDisplay';
 
 interface HeaderProps {
   onImport: () => void;
@@ -24,7 +23,7 @@ export function Header({ onImport }: HeaderProps) {
     isViewingFriend,
   } = useHabits();
   
-  const { user, userProfile, isAuthenticated, isFirebaseEnabled, signInWithGoogle, logout } = useAuth();
+  const { user, isAuthenticated, isFirebaseEnabled, signInWithGoogle, logout } = useAuth();
   const [showUserMenu, setShowUserMenu] = useState(false);
 
   // Calculate overall streak (weekly-based)
@@ -173,11 +172,6 @@ export function Header({ onImport }: HeaderProps) {
                       )}
                     </button>
                     
-                    {/* Sparks Display - to the right of avatar */}
-                    {userProfile && (
-                      <SparksDisplay sparks={userProfile.sparks} size="sm" />
-                    )}
-                    
                     {showUserMenu && (
                       <>
                         <div 
@@ -188,11 +182,6 @@ export function Header({ onImport }: HeaderProps) {
                           <div className="px-3 py-2 border-b border-slate-700 mb-2">
                             <div className="font-medium truncate">{user.displayName}</div>
                             <div className="text-xs text-slate-400 truncate">{user.email}</div>
-                            {userProfile && (
-                              <div className="mt-2">
-                                <SparksDisplay sparks={userProfile.sparks} size="md" showLabel />
-                              </div>
-                            )}
                           </div>
                           <button
                             onClick={() => {

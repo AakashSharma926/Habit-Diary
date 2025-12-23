@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo } from 'react';
 import {
   PieChart,
   Pie,
@@ -21,11 +21,8 @@ import {
   ChevronDown,
   Calendar,
   Trophy,
-  Zap,
 } from 'lucide-react';
 import { useHabits } from '../context/HabitContext';
-import { useAuth } from '../context/AuthContext';
-import { SparksDisplay, SparkBurst } from './SparksDisplay';
 import {
   formatDate,
   calculateHabitStreak,
@@ -77,7 +74,7 @@ const PRESET_RANGES: { label: string; getValue: () => { from: Date; to: Date } }
 ];
 
 export function MainDashboard() {
-  const { habits, allEntries, isViewingFriend } = useHabits();
+  const { habits, allEntries } = useHabits();
   
   // Date range state
   const [dateRange, setDateRange] = useState<DateRange>(() => {
@@ -582,7 +579,7 @@ export function MainDashboard() {
       <YearlyActivityChart habits={filteredHabits} allEntries={allEntries} />
 
       {/* Streaks Section */}
-      <StreaksSection habits={habits} allEntries={allEntries} isViewingFriend={isViewingFriend} />
+      <StreaksSection habits={habits} allEntries={allEntries} />
     </div>
   );
 }
@@ -845,10 +842,7 @@ function YearlyActivityChart({ habits, allEntries }: { habits: any[]; allEntries
 }
 
 // Streaks Section Component
-function StreaksSection({ habits, allEntries, isViewingFriend }: { habits: any[]; allEntries: any[]; isViewingFriend?: boolean }) {
-  const { userProfile, claimSparks, isAuthenticated } = useAuth();
-  const [sparksBurst, setSparksBurst] = useState<number | null>(null);
-
+function StreaksSection({ habits, allEntries }: { habits: any[]; allEntries: any[] }) {
   // Calculate overall streak (weekly-based)
   const overallStreak = useMemo(() => {
     return calculateOverallStreak(habits, allEntries);
@@ -861,37 +855,6 @@ function StreaksSection({ habits, allEntries, isViewingFriend }: { habits: any[]
       ...calculateHabitStreak(habit.id, habit, allEntries)
     })).sort((a, b) => b.currentStreak - a.currentStreak);
   }, [habits, allEntries]);
-
-  // Find all completed days for spark claiming (1 spark per completed day per habit)
-  const completedDays = useMemo(() => {
-    const completed: { habitId: string; date: string }[] = [];
-    
-    for (const habit of habits) {
-      const habitEntries = allEntries.filter(e => e.habitId === habit.id);
-      for (const entry of habitEntries) {
-        if (isEntryComplete(entry, habit)) {
-          completed.push({ habitId: habit.id, date: entry.date });
-        }
-      }
-    }
-    
-    return completed;
-  }, [habits, allEntries]);
-
-  // Auto-claim sparks for completed days (only for own data, not when viewing others)
-  useEffect(() => {
-    if (!isAuthenticated || completedDays.length === 0 || isViewingFriend) return;
-    
-    const claimRewards = async () => {
-      const result = await claimSparks(completedDays);
-      
-      if (result.totalSparksEarned > 0) {
-        setSparksBurst(result.totalSparksEarned);
-      }
-    };
-    
-    claimRewards();
-  }, [completedDays, isAuthenticated, claimSparks, isViewingFriend]);
 
   const getStreakClass = (streak: number) => {
     const level = getStreakLevel(streak);
@@ -915,25 +878,12 @@ function StreaksSection({ habits, allEntries, isViewingFriend }: { habits: any[]
   };
 
   return (
-    <>
-      {/* Spark Burst Animation */}
-      {sparksBurst && (
-        <SparkBurst 
-          amount={sparksBurst} 
-          onComplete={() => setSparksBurst(null)} 
-        />
-      )}
-      
       <div className="glass rounded-xl sm:rounded-2xl p-3 sm:p-4">
         <div className="flex items-center justify-between mb-3 sm:mb-4">
           <div className="flex items-center gap-2">
-            <Zap className="w-4 h-4 sm:w-5 sm:h-5 text-amber-400" />
+            <Flame className="w-4 h-4 sm:w-5 sm:h-5 text-orange-400" />
             <h3 className="text-sm sm:text-base font-semibold text-slate-300">Streaks</h3>
           </div>
-          {/* User's total sparks - only show for own dashboard */}
-          {userProfile && !isViewingFriend && (
-            <SparksDisplay sparks={userProfile.sparks} size="sm" showLabel />
-          )}
         </div>
 
       {/* Overall Streak Card */}
@@ -1099,6 +1049,5 @@ function StreaksSection({ habits, allEntries, isViewingFriend }: { habits: any[]
         </div>
       </div>
     </div>
-    </>
   );
 }

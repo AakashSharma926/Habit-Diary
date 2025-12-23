@@ -85,3 +85,4 @@ export function getStreakIconColor(streak: number): string {
   return '#64748b';                    // slate-500
 }
 
+
